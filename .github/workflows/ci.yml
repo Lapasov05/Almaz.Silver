@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  build-and-migrate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: almaz
+          POSTGRES_PASSWORD: almaz
+          POSTGRES_DB: almaz
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U almaz -d almaz"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Byte-compile (syntax check)
+        run: python -m compileall -q app migrations
+
+      - name: Run migrations + seed
+        env:
+          POSTGRES_HOST: localhost
+          REDIS_HOST: localhost
+          RABBITMQ_URL: amqp://guest:guest@localhost:5672//
+        run: |
+          alembic upgrade head
+          python -m app.seed
+
+      - name: Import check (wiring)
+        env:
+          POSTGRES_HOST: localhost
+          REDIS_HOST: localhost
+        run: python -c "import app.main; print('app import OK')"

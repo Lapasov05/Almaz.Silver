@@ -1,0 +1,17 @@
+# Secretlar image'ga tushmasin (runtime'da env_file orqali beriladi)
+.env
+# Muhit / IDE / VCS
+.venv/
+venv/
+.git/
+.idea/
+.vscode/
+# Python keshlari
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Docker volume papkalari
+postgres_data/
+minio_data/
