@@ -105,6 +105,13 @@ class Product(UUIDMixin, TimestampMixin, Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     # AI qidiruvi uchun kalit so'zlar/sinonimlar (TZ 6.2/8)
     ai_keywords: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # --- Ism yozish (gravyurka) xizmati ---
+    # Shu mahsulotga ism yozish mumkinmi (mahsulot qo'shishда belgilanadi)
+    engraving_available: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    # Ixtiyoriy narx override; NULL bo'lsa Settings'dagi `engraving_price` ishlatiladi
+    engraving_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     # DB tomonidan generatsiya qilinadigan to'liq matn indeksi (TZ 6.3 GIN)
     search_vector: Mapped[str | None] = mapped_column(
         TSVECTOR, Computed(_SEARCH_EXPR, persisted=True), nullable=True

@@ -179,6 +179,25 @@ tosh — **serkon (CZ)**. Operator faqat tasdiqlangan buyurtmani jo'natadi.
 
 ---
 
+## ➕ Qo'shimcha xizmat: uzukka ism yozish (gravyurka) — migratsiya `0008_engraving`
+**Naqsh:** o'lcham kabi — bu **variant EMAS**, `order_item` darajasida (TZ invariant 1 bilan bir xil).
+
+| Qatlam | Maydon | Vazifa |
+|---|---|---|
+| **Settings** (global) | `engraving_enabled`, `engraving_price` (50000) | Xizmatni yoqish/o'chirish + standart narx. Istalgan vaqt o'zgartiriladi. |
+| **product** | `engraving_available` (bool), `engraving_price` (nullable) | Mahsulot qo'shishда belgilanadi; narx yozilmasa Settings'dagi narx olinadi. |
+| **order_item** | `engraving_text`, `engraving_price` | Yoziladigan ism + **buyurtma vaqtidagi narx snapshot'i**. |
+
+- **Narx aniqlash:** `product.engraving_price` bo'lsa → o'sha; aks holda → `settings.engraving_price`.
+- **Hisob:** `items_total += (unit_price + engraving_price) * quantity` (har donaga).
+- **Snapshot:** Settings narxi keyin o'zgarsa, eski buyurtmalar o'zgarmaydi.
+- **Validatsiya:** `engraving_enabled=false` yoki `product.engraving_available=false` bo'lsa `AppError`.
+- **AI:** tool natijasida `engraving: {available, price}` qaytadi; `create_order` da `engraving_text`.
+  System prompt: narxni FAQAT tool'dan olsin, `available=false` bo'lsa taklif qilmasin (guardrail mosligi).
+- **Konflikt yo'q:** ismsiz buyurtmalarда `engraving_price=0` — eski xulq o'zgarmagan; delivery/payment/KPI oqimlari `items_total` orqali avtomatik to'g'ri ishlaydi.
+
+---
+
 ## 🎉 BARCHA FAZALAR (0–7) TUGADI
 Tizim to'liq: identity/RBAC · catalog · inbox (IG/TG) · AI agent (guardrail/tools/RAG) · orders · delivery · payments · analytics · audit · notifications · hardening. Har faza jonli Postgres(+Redis) da smoke test bilan tasdiqlangan. Migratsiyalar: `0001`–`0007`.
 

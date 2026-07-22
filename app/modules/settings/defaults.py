@@ -31,6 +31,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "yandex_enabled": False,           # TZ 11: Yandex API integratsiyasi yo'q
     "bts_enabled": True,
 
+    # --- Qo'shimcha xizmat: uzukka ism yozish (gravyurka) ---
+    # Global boshqaruv: yoqish/o'chirish + narx. Mahsulotда o'z narxi bo'lsa, o'sha ustun keladi.
+    "engraving_enabled": True,
+    "engraving_price": 50000,
+
     # --- Bonus va to'lov (TZ 2/12/14) ---
     "bonus_items": ["upakovka", "brend paket"],  # barcha buyurtmalarga bir xil
     # Eslatma (Faza 5): kartalar endi `payment_card` jadvalida. Quyidagilar eskirgan (legacy).

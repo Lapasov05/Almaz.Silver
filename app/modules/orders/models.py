@@ -76,6 +76,12 @@ class OrderItem(UUIDMixin, TimestampMixin, Base):
     unit_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)  # yaratish vaqtidagi fixed narx
     ring_size: Mapped[str | None] = mapped_column(String(10), nullable=True)  # TZ invariant 1
     bonus_snapshot: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # TZ invariant 3
+    # --- Ism yozish (gravyurka) — o'lcham kabi, variant EMAS, order'da belgilanadi ---
+    engraving_text: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Buyurtma vaqtidagi BIR DONA uchun ism yozish narxi (snapshot; keyin settings o'zgarsa ta'sir qilmaydi)
+    engraving_price: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), server_default="0", nullable=False
+    )
 
     order: Mapped["Order"] = relationship(back_populates="items")
 

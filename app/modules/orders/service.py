@@ -58,9 +58,20 @@ class OrdersService:
         if not items:
             raise AppError("Buyurtmada kamida bitta mahsulot bo'lishi kerak")
 
+        settings_repo = SettingsRepository(self.db)
         # Bonuslar global (TZ 18): yaratish vaqtidagi nusxa
-        bonus_setting = await SettingsRepository(self.db).get("bonus_items")
+        bonus_setting = await settings_repo.get("bonus_items")
         bonus_snapshot = bonus_setting.value if bonus_setting is not None else []
+
+        # Ism yozish (gravyurka) — global sozlamalar
+        engraving_enabled_setting = await settings_repo.get("engraving_enabled")
+        engraving_enabled = (
+            bool(engraving_enabled_setting.value) if engraving_enabled_setting is not None else False
+        )
+        engraving_price_setting = await settings_repo.get("engraving_price")
+        default_engraving_price = (
+            Decimal(str(engraving_price_setting.value)) if engraving_price_setting is not None else Decimal("0")
+        )
 
         order = Order(
             order_no=await self._generate_order_no(),
@@ -86,7 +97,23 @@ class OrdersService:
 
             variant.reserved_qty += it.quantity  # TZ 10: reservation
             unit_price = product.price
-            items_total += unit_price * it.quantity
+
+            # --- Ism yozish (gravyurka) narxini aniqlash ---
+            engraving_text = (it.engraving_text or "").strip() or None
+            engraving_price = Decimal("0")
+            if engraving_text is not None:
+                if not engraving_enabled:
+                    raise AppError("Ism yozish xizmati hozircha o'chirilgan")
+                if not product.engraving_available:
+                    raise AppError(f"Bu mahsulotga ism yozib bo'lmaydi: {product.name}")
+                # Mahsulotда o'z narxi bo'lsa o'sha, aks holda Settings'dagi narx
+                engraving_price = (
+                    product.engraving_price
+                    if product.engraving_price is not None
+                    else default_engraving_price
+                )
+
+            items_total += (unit_price + engraving_price) * it.quantity
 
             order.items.append(
                 OrderItem(
@@ -95,6 +122,8 @@ class OrdersService:
                     unit_price=unit_price,
                     ring_size=it.ring_size,
                     bonus_snapshot=bonus_snapshot,
+                    engraving_text=engraving_text,
+                    engraving_price=engraving_price,
                 )
             )
 

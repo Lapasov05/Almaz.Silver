@@ -12,6 +12,8 @@ class OrderItemCreate(BaseModel):
     variant_id: uuid.UUID
     quantity: int = Field(default=1, ge=1)
     ring_size: str | None = Field(default=None, max_length=10)  # TZ: o'lcham order'da
+    # Ism yozish (gravyurka): matn berilsa xizmat narxi qo'shiladi
+    engraving_text: str | None = Field(default=None, max_length=50)
 
 
 class OrderCreate(BaseModel):
@@ -32,6 +34,8 @@ class OrderItemOut(BaseModel):
     unit_price: Decimal
     ring_size: str | None
     bonus_snapshot: list | None
+    engraving_text: str | None
+    engraving_price: Decimal  # bir dona uchun (jami: (unit_price + engraving_price) * quantity)
 
 
 class OrderStatusHistoryOut(BaseModel):

@@ -112,7 +112,10 @@ TOOL_SPECS: list[dict] = [
         "type": "function",
         "function": {
             "name": "create_order",
-            "description": "Buyurtma yaratish + zaxira band qilish. Uzuk uchun ring_size so'ralsin.",
+            "description": (
+                "Buyurtma yaratish + zaxira band qilish. Uzuk uchun ring_size so'ralsin. "
+                "Mijoz uzukka ism yozdirmoqchi bo'lsa engraving_text yuboriladi (qo'shimcha narx)."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -124,6 +127,10 @@ TOOL_SPECS: list[dict] = [
                                 "variant_id": {"type": "string"},
                                 "quantity": {"type": "integer", "minimum": 1},
                                 "ring_size": {"type": "string"},
+                                "engraving_text": {
+                                    "type": "string",
+                                    "description": "Uzukka yoziladigan ism (faqat engraving.available=true bo'lsa)",
+                                },
                             },
                             "required": ["variant_id"],
                         },
@@ -175,11 +182,11 @@ TOOL_SPECS: list[dict] = [
 ]
 
 
-def _product_brief(product: Product) -> dict:
+def _product_brief(product: Product, engraving: tuple[bool, Decimal] | None = None) -> dict:
     active_variants = [v for v in product.variants if v.is_active and v.deleted_at is None]
     default_variant = active_variants[0] if active_variants else None
     available = sum(max(v.available, 0) for v in active_variants)
-    return {
+    brief = {
         "product_id": str(product.id),
         "name": product.name,
         "price": _num(product.price),
@@ -191,6 +198,24 @@ def _product_brief(product: Product) -> dict:
         "default_variant_id": str(default_variant.id) if default_variant else None,
         "shortcodes": [m.shortcode for m in product.media if m.shortcode],
     }
+    # Ism yozish (gravyurka) — AI mijozga taklif qilishi uchun amaldagi narx
+    if engraving is not None:
+        enabled_globally, default_price = engraving
+        offered = bool(enabled_globally and product.engraving_available)
+        brief["engraving"] = {
+            "available": offered,
+            "price": _num(product.engraving_price if product.engraving_price is not None else default_price)
+            if offered
+            else None,
+        }
+    return brief
+
+
+async def _engraving_settings(db: AsyncSession) -> tuple[bool, Decimal]:
+    """(global yoqilganmi, standart narx) — Settings'dan."""
+    enabled = bool(await _get_setting(db, "engraving_enabled", False))
+    price = await _get_setting(db, "engraving_price", 0)
+    return enabled, Decimal(str(price))
 
 
 def _num(value: Decimal | None) -> float | None:
@@ -211,11 +236,12 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         match_type, results = await catalog.search(
             q=args.get("query"), shortcode=args.get("shortcode"), limit=5
         )
-        return {"match_type": match_type, "products": [_product_brief(p) for p, _ in results]}
+        eng = await _engraving_settings(db)
+        return {"match_type": match_type, "products": [_product_brief(p, eng) for p, _ in results]}
 
     if name == "get_product_details":
         product = await catalog.get_product(uuid.UUID(args["product_id"]))
-        brief = _product_brief(product)
+        brief = _product_brief(product, await _engraving_settings(db))
         brief["description"] = product.description
         brief["variants"] = [
             {"variant_id": str(v.id), "sku": v.sku, "available": max(v.available, 0)}
@@ -237,7 +263,8 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
 
     if name == "recommend":
         products = await catalog.list_products(status="active", limit=5)
-        return {"products": [_product_brief(p) for p in products]}
+        eng = await _engraving_settings(db)
+        return {"products": [_product_brief(p, eng) for p in products]}
 
     if name == "calc_delivery":
         zone = args.get("zone")
@@ -269,6 +296,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 variant_id=uuid.UUID(it["variant_id"]),
                 quantity=int(it.get("quantity", 1)),
                 ring_size=it.get("ring_size"),
+                engraving_text=it.get("engraving_text"),
             )
             for it in args.get("items", [])
         ]

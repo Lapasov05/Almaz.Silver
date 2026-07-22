@@ -131,6 +131,35 @@ curl -s -X POST http://localhost:8000/catalog/variants/<variant_id>/stock \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"stock_qty":5}'
 ```
 
+### Uzukka ism yozish (gravyurka) xizmati
+
+Narx **Settings'dan** boshqariladi (istalgan vaqt o'zgartiriladi), mahsulotда esa
+yoqiladi va xohlasangiz o'z narxi beriladi.
+
+```bash
+# 1) Global narx / yoqish-o'chirish (settings:manage_settings)
+curl -s -X PUT http://localhost:8000/settings/engraving_price \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"value":50000}'
+curl -s -X PUT http://localhost:8000/settings/engraving_enabled \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"value":true}'
+
+# 2) Mahsulot qo'shishда belgilash (narx yozilmasa — settings'dagi narx olinadi)
+curl -s -X POST http://localhost:8000/catalog/products -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Kumush uzuk","price":400000,"status":"active","engraving_available":true}'
+#    ... yoki shu mahsulotga alohida narx:
+#    "engraving_available":true, "engraving_price":70000
+
+# 3) Buyurtmada ism berish -> narx avtomatik qo'shiladi
+curl -s -X POST http://localhost:8000/orders -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"customer_id":"<id>","items":[{"variant_id":"<vid>","ring_size":"18","engraving_text":"Dilnoza"}]}'
+```
+> **Narx tartibi:** mahsulotning `engraving_price` (bo'lsa) → aks holda Settings'dagi `engraving_price`.
+> Narx buyurtmada **snapshot** qilinadi — keyin Settings o'zgarsa eski buyurtmalar o'zgarmaydi.
+> `engraving_enabled=false` yoki mahsulotда `engraving_available=false` bo'lsa — ism qabul qilinmaydi.
+> AI ham bu xizmatni taklif qiladi va narxni faqat katalogdan oladi (guardrail).
+
 ### Inbox / integratsiyalar (Faza 2)
 
 ```bash

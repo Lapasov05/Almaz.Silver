@@ -104,6 +104,10 @@ class ProductCreate(BaseModel):
     status: ProductStatus = ProductStatus.draft
     description: str | None = None
     ai_keywords: list[str] | None = None
+    # Ism yozish (gravyurka): shu mahsulotga mumkinmi + ixtiyoriy narx.
+    # engraving_price bo'sh bo'lsa Settings'dagi `engraving_price` ishlatiladi.
+    engraving_available: bool = False
+    engraving_price: Decimal | None = Field(default=None, ge=0)
     variants: list[VariantCreate] | None = None  # bo'sh bo'lsa default variant yaratiladi
     media: list[MediaCreate] | None = None
 
@@ -119,6 +123,8 @@ class ProductUpdate(BaseModel):
     status: ProductStatus | None = None
     description: str | None = None
     ai_keywords: list[str] | None = None
+    engraving_available: bool | None = None
+    engraving_price: Decimal | None = Field(default=None, ge=0)
 
 
 class ProductOut(BaseModel):
@@ -135,6 +141,8 @@ class ProductOut(BaseModel):
     status: ProductStatus
     description: str | None
     ai_keywords: list[str] | None
+    engraving_available: bool
+    engraving_price: Decimal | None  # None -> Settings'dagi narx qo'llanadi
     variants: list[VariantOut]
     media: list[MediaOut]
 

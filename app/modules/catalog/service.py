@@ -74,6 +74,8 @@ class CatalogService:
             status=data.status,
             description=data.description,
             ai_keywords=data.ai_keywords,
+            engraving_available=data.engraving_available,
+            engraving_price=data.engraving_price,
         )
         # Variantlar: berilganini ishlat, bo'lmasa 1 ta default (TZ muhim qaror 1)
         variant_inputs = data.variants or [VariantCreate()]
