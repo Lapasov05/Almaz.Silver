@@ -3,6 +3,7 @@
 Service qatlami domen xatolarini ko'taradi; API qatlami ularni JSON javobga aylantiradi.
 """
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 
@@ -35,8 +36,29 @@ class NotFoundError(AppError):
 
 
 def register_exception_handlers(app: FastAPI) -> None:
-    """Domen xatolarini yagona formatdagi JSON javobga o'girish."""
+    """Domen xatolarini yagona formatdagi JSON javobga o'girish.
+
+    Frontend uchun kontrakt: `detail` DOIM matn (string). Validatsiya xatosida
+    qo'shimcha `errors` ro'yxati beriladi (maydon → xabar).
+    """
 
     @app.exception_handler(AppError)
     async def _handle_app_error(_: Request, exc: AppError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
+
+    @app.exception_handler(RequestValidationError)
+    async def _handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+        """422 — FastAPI standart formati o'rniga frontend uchun barqaror shakl."""
+        errors = [
+            {
+                # loc: ("body", "field", ...) -> "field"
+                "field": ".".join(str(p) for p in err.get("loc", []) if p not in ("body", "query", "path")),
+                "message": err.get("msg", ""),
+                "type": err.get("type", ""),
+            }
+            for err in exc.errors()
+        ]
+        return JSONResponse(
+            status_code=422,
+            content={"detail": "Yuborilgan ma'lumot noto'g'ri", "errors": errors},
+        )

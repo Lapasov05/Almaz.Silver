@@ -63,6 +63,20 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"  # checkout link uchun tashqi bazaviy URL
     checkout_token_expiry_hours: int = 24           # bir martalik token muddati
 
+    # --- CORS (frontend ulanishi uchun) ---
+    # Vergul bilan ajratilgan origin ro'yxati. Prod frontend domenini shu yerga qo'shing.
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"   # Vite (React/Vue) dev
+        "http://localhost:3000,http://127.0.0.1:3000"    # Next.js / CRA dev
+    )
+    # Ixtiyoriy regex (masalan barcha subdomenlar): r"https://.*\.cognilabs\.org"
+    cors_origin_regex: str = ""
+    cors_allow_credentials: bool = True
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
     # --- API hujjatlari (/docs, /redoc, /openapi.json) himoyasi ---
     docs_auth_enabled: bool = True
     docs_username: str = "admin"

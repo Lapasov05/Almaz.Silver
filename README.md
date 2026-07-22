@@ -61,6 +61,44 @@ docker compose up --build
 
 ---
 
+## 🖥 Frontend ulash (CORS)
+
+Ruxsat etilgan domenlar `.env` dan boshqariladi — kodga tegmasdan qo'shasiz:
+
+```bash
+# dev (Vite 5173 / Next 3000) allaqachon ruxsat etilgan
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000
+# prod frontend domenini qo'shing (oxirida "/" YO'Q):
+# CORS_ORIGINS=http://localhost:5173,https://almaz.cognilabs.org
+# yoki barcha subdomenlar uchun regex:
+# CORS_ORIGIN_REGEX=https://.*\.cognilabs\.org
+CORS_ALLOW_CREDENTIALS=true
+```
+
+**Frontend uchun bilish kerak:**
+
+| Mavzu | Tafsilot |
+|---|---|
+| Auth | `POST /auth/login` → `access_token` + `refresh_token`. Har so'rovда `Authorization: Bearer <access>` |
+| Token muddati | access 30 daq → `POST /auth/refresh`. Chiqish: `POST /auth/logout` (refresh bekor bo'ladi) |
+| Xato formati | Doim `{"detail": "matn"}`. 422 da qo'shimcha `{"errors":[{"field","message"}]}` |
+| Statuslar | `401` token yo'q/eskirgan · `403` permission yetmaydi · `429` rate limit · `422` validatsiya |
+| Ruxsatlar | `GET /auth/me` → `permissions[]` qaytadi; UI tugmalarini shunga qarab yashiring |
+| Debug | Har javobда `X-Request-ID` bor (CORS'да ochilgan) — log bilan solishtirish uchun |
+| ⚠️ URL | Yo'l oxiriga **`/` qo'ymang** (`/orders` ✅, `/orders/` ❌ — 307 redirect bo'ladi) |
+| ⚠️ Login limiti | `POST /auth/login` daqiqasiga 10 marta (brute-force himoyasi). Dev'да kerak bo'lsa `RATE_LIMIT_LOGIN_PER_MIN` ni oshiring |
+
+```js
+// Namuna (fetch)
+const res = await fetch(`${API}/inbox/conversations`, {
+  headers: { Authorization: `Bearer ${accessToken}` },
+});
+if (res.status === 401) { /* refresh yoki login sahifasi */ }
+const data = await res.json();
+```
+
+---
+
 ## 📖 API hujjatlari (himoyalangan)
 
 `/docs`, `/redoc` va `/openapi.json` **HTTP Basic login/parol** bilan yopilgan (`.env` dan):

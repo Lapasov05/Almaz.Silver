@@ -69,6 +69,11 @@ services:
     container_name: almaz_api
     restart: unless-stopped
     env_file: .env
+    environment:
+      # Nginx orqasidamiz: X-Forwarded-Proto/For ga ishonish. Busiz uvicorn ularni
+      # e'tiborsiz qoldiradi va redirect'lar https o'rniga http bo'lib, brauzer
+      # "mixed content" xatosi beradi. Faqat ichki docker tarmog'idan kelgani uchun xavfsiz.
+      FORWARDED_ALLOW_IPS: "*"
     # Migratsiya -> seed -> server. Dev uchun qulay; prod'da migratsiya alohida qadam bo'ladi.
     command: >
       sh -c "alembic upgrade head &&

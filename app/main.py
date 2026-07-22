@@ -8,6 +8,7 @@ import uuid
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -104,6 +105,15 @@ def create_app() -> FastAPI:
         start = time.perf_counter()
         try:
             response = await call_next(request)
+        except Exception:  # noqa: BLE001
+            # Kutilmagan xatoni SHU YERDA ushlaymiz: bu middleware CORS ichida bo'lgani uchun
+            # javobga CORS headerlari qo'shiladi va frontend haqiqiy 500 ni ko'radi
+            # ("CORS error" bilan yashirilmaydi).
+            log.exception("unhandled_error", method=request.method, path=request.url.path)
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": "Ichki xatolik yuz berdi", "request_id": request_id},
+            )
         finally:
             structlog.contextvars.clear_contextvars()
         duration_ms = round((time.perf_counter() - start) * 1000, 1)
@@ -145,6 +155,21 @@ def create_app() -> FastAPI:
 
             return JSONResponse(status_code=503, content={"status": "unavailable", "checks": checks})
         return {"status": "ready", "checks": checks}
+
+    # --- CORS (frontend uchun) ---
+    # OXIRIDA qo'shiladi => eng TASHQI qatlam bo'ladi. Shunda xato javoblarда ham
+    # (401/403/429/422) CORS headerlari bo'ladi va brauzer haqiqiy xatoni ko'rsatadi,
+    # "CORS error" bilan yashirmaydi. Preflight (OPTIONS) ham shu yerда tugaydi.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins_list,
+        allow_origin_regex=settings.cors_origin_regex or None,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],          # Authorization, Content-Type va h.k.
+        expose_headers=["X-Request-ID"],  # frontend log/debug uchun o'qiy oladi
+        max_age=600,                  # preflight keshi (10 daqiqa)
+    )
 
     # Modul routerlari (TZ 4-bo'lim)
     app.include_router(identity_router)
