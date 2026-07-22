@@ -168,6 +168,7 @@ tosh — **serkon (CZ)**. Operator faqat tasdiqlangan buyurtmani jo'natadi.
 - **Proaktiv qayta jalb (TZ 17):** `inbox/reengagement.py` — IG 24h oynasi ichida jim qolgan (oxirgi xabar mijozdan) suhbatlarga nudge. Celery `inbox.proactive_reengage` + **beat schedule** + compose `beat` servisi. Spamга qarshi: jalbdan keyin oxirgi xabar chiquvchi bo'ladi.
 - **Monitoring/logging (TZ 16):** `core/logging_config.py` (structlog JSON) + request middleware (request_id, latency) + **`GET /health/ready`** (DB+Redis).
 - **DevOps (TZ 16):** `scripts/backup.sh` (pg_dump + MinIO mirror), `.github/workflows/ci.yml` (compile+migrate+seed+import), nginx xavfsizlik headerlari + rate limit + TLS blok (izohда).
+- **API hujjatlari himoyasi:** `/docs`, `/redoc`, `/openapi.json` — **HTTP Basic** (`DOCS_USERNAME`/`DOCS_PASSWORD`, constant-time solishtiruv, `DOCS_AUTH_ENABLED`). FastAPI standart `docs_url/redoc_url/openapi_url` o'chirilgan va himoyalangan holda qayta ochilgan. `/health*` ochiq (probe).
 - **Tayyor mezoni:** rate limit, prompt injection himoya, proaktiv jalb, monitoring/backup, deploy. ✔ (jonli Postgres+Redis smoke)
 
 **Faza 7 qarorlari:**

@@ -53,10 +53,30 @@ docker compose up --build
 |---|---|---|
 | API (FastAPI) | http://localhost:8000 | to'g'ridan-to'g'ri |
 | API (Nginx orqali) | http://localhost:80 | reverse proxy |
-| Swagger UI | http://localhost:8000/docs | interaktiv API |
+| Swagger UI | http://localhost:8000/docs | interaktiv API — **login/parol bilan** 🔒 |
+| ReDoc | http://localhost:8000/redoc | hujjatlar — **login/parol bilan** 🔒 |
 | RabbitMQ UI | http://localhost:15672 | guest / guest |
 | MinIO Console | http://localhost:9001 | minioadmin / minioadmin |
 | PostgreSQL | localhost:5432 | almaz / almaz |
+
+---
+
+## 📖 API hujjatlari (himoyalangan)
+
+`/docs`, `/redoc` va `/openapi.json` **HTTP Basic login/parol** bilan yopilgan (`.env` dan):
+
+| Sozlama | Default |
+|---|---|
+| `DOCS_USERNAME` | `admin` |
+| `DOCS_PASSWORD` | `almaz-docs` |
+| `DOCS_AUTH_ENABLED` | `true` (o'chirish uchun `false`) |
+
+Brauzerда http://localhost:8000/docs ochilganda login oynasi chiqadi. CLI bilan:
+
+```bash
+curl -s -u admin:almaz-docs http://localhost:8000/openapi.json | head
+```
+> ⚠️ Prod'da `DOCS_PASSWORD` ni albatta almashtiring. `/health` va `/health/ready` ochiq qoladi (probe uchun).
 
 ---
 

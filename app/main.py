@@ -2,17 +2,22 @@
 
 Barcha modul routerlari + hardening (structured logging, request middleware, readiness).
 """
+import secrets
 import time
 import uuid
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.core.database import engine
 from app.core.exceptions import register_exception_handlers
 from app.core.logging_config import configure_logging, get_logger
+from app.core.rate_limit import rate_limit
 from app.core.redis import get_redis
 from app.modules.ai.router import router as ai_router
 from app.modules.analytics.router import router as analytics_router
@@ -31,6 +36,32 @@ from app.modules.settings.router import router as settings_router
 
 settings = get_settings()
 
+# --- API hujjatlari uchun HTTP Basic himoya ---
+_docs_security = HTTPBasic(auto_error=False)
+
+
+def verify_docs_auth(
+    credentials: HTTPBasicCredentials | None = Depends(_docs_security),
+) -> None:
+    """/docs, /redoc, /openapi.json uchun login/parol tekshiruvi (constant-time)."""
+    if not settings.docs_auth_enabled:
+        return
+    unauthorized = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Hujjatlarga kirish uchun login/parol kerak",
+        headers={"WWW-Authenticate": "Basic"},
+    )
+    if credentials is None:
+        raise unauthorized
+    user_ok = secrets.compare_digest(
+        credentials.username.encode("utf8"), settings.docs_username.encode("utf8")
+    )
+    pass_ok = secrets.compare_digest(
+        credentials.password.encode("utf8"), settings.docs_password.encode("utf8")
+    )
+    if not (user_ok and pass_ok):
+        raise unauthorized
+
 
 def create_app() -> FastAPI:
     configure_logging()
@@ -39,10 +70,31 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="1.0.0",
-        docs_url="/docs",
+        # Standart hujjat yo'llari o'chirilgan — quyida himoyalangan holda qayta ochiladi
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
 
     register_exception_handlers(app)
+
+    # --- Himoyalangan hujjatlar (login/parol: DOCS_USERNAME / DOCS_PASSWORD) ---
+    _docs_deps = [
+        Depends(verify_docs_auth),
+        Depends(rate_limit(settings.rate_limit_default_per_min, "docs")),
+    ]
+
+    @app.get("/openapi.json", include_in_schema=False, dependencies=_docs_deps)
+    async def openapi_schema() -> JSONResponse:
+        return JSONResponse(app.openapi())
+
+    @app.get("/docs", include_in_schema=False, dependencies=_docs_deps)
+    async def swagger_ui():
+        return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{settings.app_name} — API")
+
+    @app.get("/redoc", include_in_schema=False, dependencies=_docs_deps)
+    async def redoc_ui():
+        return get_redoc_html(openapi_url="/openapi.json", title=f"{settings.app_name} — API")
 
     # TZ 16: har so'rov uchun request_id + strukturaviy log (metod/yo'l/status/vaqt)
     @app.middleware("http")

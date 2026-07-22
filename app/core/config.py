@@ -63,6 +63,11 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"  # checkout link uchun tashqi bazaviy URL
     checkout_token_expiry_hours: int = 24           # bir martalik token muddati
 
+    # --- API hujjatlari (/docs, /redoc, /openapi.json) himoyasi ---
+    docs_auth_enabled: bool = True
+    docs_username: str = "admin"
+    docs_password: str = "almaz-docs"  # prod'da ALBATTA almashtiring
+
     # --- Hardening (TZ 15/16/17, Faza 7) ---
     rate_limit_enabled: bool = True
     rate_limit_login_per_min: int = 10       # login brute-force himoyasi
