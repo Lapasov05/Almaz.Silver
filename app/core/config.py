@@ -67,7 +67,8 @@ class Settings(BaseSettings):
     # Vergul bilan ajratilgan origin ro'yxati. Prod frontend domenini shu yerga qo'shing.
     cors_origins: str = (
         "http://localhost:5173,http://127.0.0.1:5173,"   # Vite (React/Vue) dev
-        "http://localhost:3000,http://127.0.0.1:3000"    # Next.js / CRA dev
+        "http://localhost:3000,http://127.0.0.1:3000,"   # Next.js / CRA dev
+        "https://almaz-steel.vercel.app"                 # prod frontend (Vercel)
     )
     # Ixtiyoriy regex (masalan barcha subdomenlar): r"https://.*\.cognilabs\.org"
     cors_origin_regex: str = ""
