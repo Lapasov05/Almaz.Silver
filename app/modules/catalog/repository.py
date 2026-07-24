@@ -10,7 +10,6 @@ from app.core.pagination import PageParams, paginate
 from app.modules.catalog.models import (
     Category,
     Gender,
-    Kurs,
     Material,
     Product,
     ProductMedia,
@@ -69,27 +68,30 @@ class CatalogRepository:
             stmt = stmt.where(or_(Category.name_uz.ilike(like), Category.name_ru.ilike(like)))
         return await paginate(self.db, stmt, [Category.name_uz], pp)
 
-    # ---------- Kurs (gramm kursi) ----------
-    async def get_kurs(self, kurs_id: uuid.UUID) -> Kurs | None:
-        return await self.db.get(Kurs, kurs_id)
+    # ---------- Sklad: kam qolgan mahsulotlar ----------
+    async def list_low_stock(self, *, global_threshold: int, status: str | None, pp: PageParams):
+        """Mavjud zaxira chegaradan kam bo'lgan mahsulotlar (faqat 'stocked' variantlar).
 
-    async def list_kurs(self, *, category_id: uuid.UUID | None, is_active: bool | None, pp: PageParams):
-        stmt = select(Kurs)
-        if category_id is not None:
-            stmt = stmt.where(Kurs.category_id == category_id)
-        if is_active is not None:
-            stmt = stmt.where(Kurs.is_active.is_(is_active))
-        return await paginate(self.db, stmt, [Kurs.created_at.desc()], pp)
-
-    async def get_active_gram_price(self, category_id: uuid.UUID) -> Decimal | None:
-        """Kategoriyaning eng oxirgi AKTIV kursi (gramm narxi)."""
-        res = await self.db.execute(
-            select(Kurs.value)
-            .where(Kurs.category_id == category_id, Kurs.is_active.is_(True))
-            .order_by(Kurs.created_at.desc())
-            .limit(1)
+        Chegara: mahsulotning `low_stock_threshold` (bo'lsa), aks holda global sozlama.
+        """
+        avail = func.coalesce(func.sum(Variant.stock_qty - Variant.reserved_qty), 0)
+        threshold = func.coalesce(Product.low_stock_threshold, global_threshold)
+        base = (
+            select(Product.id)
+            .join(Variant, Variant.product_id == Product.id)
+            .where(
+                Product.deleted_at.is_(None),
+                Variant.deleted_at.is_(None),
+                Variant.is_active.is_(True),
+                Variant.fulfillment_type == "stocked",
+            )
         )
-        return res.scalar_one_or_none()
+        if status is not None:
+            base = base.where(Product.status == status)
+        low_ids = base.group_by(Product.id, Product.low_stock_threshold).having(avail < threshold)
+
+        stmt = select(Product).where(Product.id.in_(low_ids), Product.deleted_at.is_(None))
+        return await paginate(self.db, stmt, [Product.created_at.desc()], pp, loaders=_PRODUCT_LOADERS)
 
     # ---------- Product ----------
     async def get_product(self, product_id: uuid.UUID) -> Product | None:

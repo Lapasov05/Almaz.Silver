@@ -36,6 +36,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "engraving_enabled": True,
     "engraving_price": 50000,
 
+    # --- Sklad ---
+    "low_stock_threshold": 10,  # global «kam qolgan» chegarasi (mahsulotда override bo'lishi mumkin)
+
     # --- Bonus va to'lov (TZ 2/12/14) ---
     "bonus_items": ["upakovka", "brend paket"],  # barcha buyurtmalarga bir xil
     # Eslatma (Faza 5): kartalar endi `payment_card` jadvalida. Quyidagilar eskirgan (legacy).

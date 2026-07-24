@@ -88,6 +88,57 @@ class AnalyticsService:
         }
 
 
+    async def top_products(self, *, date_from=None, date_to=None, limit: int = 20) -> list[dict]:
+        """Eng ko'p so'ralgan/sotilgan mahsulotlar (aniq — order_item bo'yicha, TZ 1).
+
+        - so'ralgan (ordered): barcha buyurtmalardagi dona (talab).
+        - sotilgan (sold): faqat to'lovi tasdiqlangan (confirmed+) buyurtmalardagi dona.
+        - daromad (revenue): sotilganlardan ((unit_price + engraving_price) * quantity).
+        Reyting: sotilgan dona bo'yicha kamayish tartibida.
+        """
+        from app.modules.catalog.models import Product
+        from app.modules.orders.models import Order, OrderItem
+        from app.modules.catalog.models import Variant
+
+        paid = Order.status.in_(_PAID_STATUSES)
+        line_total = (OrderItem.unit_price + OrderItem.engraving_price) * OrderItem.quantity
+
+        stmt = (
+            select(
+                Product.id,
+                Product.name_uz,
+                func.coalesce(func.sum(OrderItem.quantity), 0).label("ordered_qty"),
+                func.count(func.distinct(Order.id)).label("orders_count"),
+                func.coalesce(func.sum(OrderItem.quantity).filter(paid), 0).label("sold_qty"),
+                func.coalesce(func.sum(line_total).filter(paid), 0).label("revenue"),
+            )
+            .select_from(OrderItem)
+            .join(Order, Order.id == OrderItem.order_id)
+            .join(Variant, Variant.id == OrderItem.variant_id)
+            .join(Product, Product.id == Variant.product_id)
+            .group_by(Product.id, Product.name_uz)
+            .order_by(func.coalesce(func.sum(OrderItem.quantity).filter(paid), 0).desc())
+            .limit(limit)
+        )
+        if date_from is not None:
+            stmt = stmt.where(Order.created_at >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(Order.created_at <= date_to)
+
+        rows = (await self.db.execute(stmt)).all()
+        return [
+            {
+                "product_id": str(r.id),
+                "name": r.name_uz,
+                "ordered_qty": int(r.ordered_qty),      # so'ralgan (dona)
+                "orders_count": int(r.orders_count),    # nechta buyurtmada
+                "sold_qty": int(r.sold_qty),            # sotilgan (to'langan, dona)
+                "revenue": _num(r.revenue),             # daromad
+            }
+            for r in rows
+        ]
+
+
 def _num(value) -> float:
     return float(value) if value is not None else 0.0
 

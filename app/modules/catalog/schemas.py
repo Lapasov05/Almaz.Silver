@@ -59,31 +59,6 @@ class CategoryOut(BaseModel):
     name_ru: str | None
     slug: str
     parent_id: uuid.UUID | None
-    active_gram_price: Decimal | None = None  # kategoriyaning aktiv kursi (kalkulyator uchun)
-
-
-# ---------- Kurs (gramm kursi) ----------
-class KursCreate(BaseModel):
-    category_id: uuid.UUID
-    value: Decimal = Field(ge=0)  # 1 gramm narxi
-    is_active: bool = True
-    note: str | None = Field(default=None, max_length=255)
-
-
-class KursUpdate(BaseModel):
-    value: Decimal | None = Field(default=None, ge=0)
-    is_active: bool | None = None
-    note: str | None = Field(default=None, max_length=255)
-
-
-class KursOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: uuid.UUID
-    category_id: uuid.UUID
-    value: Decimal
-    is_active: bool
-    note: str | None
 
 
 # ---------- Variant ----------
@@ -151,14 +126,14 @@ class ProductCreate(BaseModel):
     gender_id: uuid.UUID | None = None
     material_id: uuid.UUID | None = None
     stone_id: uuid.UUID | None = None
-    # Narx: bo'sh bo'lsa kategoriya gram_price * weight_grams orqali hisoblanadi
-    price: Decimal | None = Field(default=None, ge=0)
-    discount_price: Decimal | None = Field(default=None, ge=0)  # mijoz to'laydi
-    weight_grams: Decimal | None = Field(default=None, ge=0)
+    # Narx: asl (eski) narx majburiy; chegirma ixtiyoriy (bo'sh -> mijoz price to'laydi)
+    price: Decimal = Field(ge=0)
+    discount_price: Decimal | None = Field(default=None, ge=0)
     status: ProductStatus = ProductStatus.draft
     ai_keywords: list[str] | None = None
     engraving_available: bool = False
     engraving_price: Decimal | None = Field(default=None, ge=0)
+    low_stock_threshold: int | None = Field(default=None, ge=0)  # bo'sh -> global sozlama
     variants: list[VariantCreate] | None = None
     media: list[MediaCreate] | None = None
     # Qulaylik: faqat rasm URL'larini berish (media yaratiladi)
@@ -176,11 +151,11 @@ class ProductUpdate(BaseModel):
     stone_id: uuid.UUID | None = None
     price: Decimal | None = Field(default=None, ge=0)
     discount_price: Decimal | None = Field(default=None, ge=0)
-    weight_grams: Decimal | None = Field(default=None, ge=0)
     status: ProductStatus | None = None
     ai_keywords: list[str] | None = None
     engraving_available: bool | None = None
     engraving_price: Decimal | None = Field(default=None, ge=0)
+    low_stock_threshold: int | None = Field(default=None, ge=0)
 
 
 class ProductOut(BaseModel):
@@ -192,27 +167,20 @@ class ProductOut(BaseModel):
     name_ru: str | None
     description_uz: str | None
     description_ru: str | None
-    price: Decimal                 # asosiy (chizilgan)
-    discount_price: Decimal | None  # chegirmali
-    effective_price: Decimal        # mijoz to'laydigan narx
-    weight_grams: Decimal | None
+    price: Decimal                  # asl (eski, chizilgan) narx
+    discount_price: Decimal | None  # chegirma narx
+    effective_price: Decimal        # mijoz to'laydigan narx (chegirma bo'lsa o'sha, aks holda price)
     status: ProductStatus
     ai_keywords: list[str] | None
     engraving_available: bool
     engraving_price: Decimal | None
+    low_stock_threshold: int | None
+    available: int                  # umumiy mavjud zaxira
     gender: ReferenceOut | None
     material: ReferenceOut | None
     stone: ReferenceOut | None
     variants: list[VariantOut]
     media: list[MediaOut]
-
-
-# ---------- Og'irlik kalkulyatori ----------
-class PriceCalcOut(BaseModel):
-    category_id: uuid.UUID
-    gram_price: Decimal
-    weight_grams: Decimal
-    price: Decimal
 
 
 # ---------- Search ----------

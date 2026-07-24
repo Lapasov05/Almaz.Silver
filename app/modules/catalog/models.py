@@ -96,24 +96,6 @@ class Category(UUIDMixin, TimestampMixin, Base):
     parent: Mapped["Category | None"] = relationship(remote_side="Category.id")
 
 
-class Kurs(UUIDMixin, TimestampMixin, Base):
-    """Gramm kursi (narx/gramm) — kategoriyaga ulangan. Og'irlik kalkulyatori shundan oladi.
-
-    Bir kategoriyaда bir nechta kurs bo'lishi mumkin; kalkulyator eng oxirgi AKTIV kursni oladi.
-    """
-
-    __tablename__ = "kurs"
-
-    category_id: Mapped[uuid.UUID] = mapped_column(
-        PgUUID(as_uuid=True), ForeignKey("category.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)  # 1 gramm narxi
-    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
-    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
-
-    category: Mapped["Category"] = relationship()
-
-
 class Product(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "product"
 
@@ -137,11 +119,11 @@ class Product(UUIDMixin, TimestampMixin, Base):
         PgUUID(as_uuid=True), ForeignKey("stone.id", ondelete="SET NULL"), nullable=True
     )
 
-    # --- Narx: asosiy + chegirmali ---
-    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)  # asosiy (chizilgan)
-    discount_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)  # mijoz to'laydi
-    # --- Og'irlik (kategoriya gram_price bilan kalkulyator) ---
-    weight_grams: Mapped[Decimal | None] = mapped_column(Numeric(8, 3), nullable=True)
+    # --- Narx: asosiy (eski) + chegirmali (yangi, mijoz to'laydi) ---
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)  # asl/eski narx
+    discount_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)  # chegirma narx
+    # --- Sklad: shu mahsulot uchun «kam qolgan» chegarasi (bo'sh -> global sozlama) ---
+    low_stock_threshold: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     status: Mapped[ProductStatus] = mapped_column(
         Enum(ProductStatus, native_enum=False, name="product_status", length=20),
@@ -172,8 +154,17 @@ class Product(UUIDMixin, TimestampMixin, Base):
 
     @property
     def effective_price(self) -> Decimal:
-        """Mijoz to'laydigan narx: chegirma bo'lsa — o'sha, aks holda asosiy narx."""
+        """Mijoz to'laydigan narx: chegirma bo'lsa — o'sha, aks holda asl narx."""
         return self.discount_price if self.discount_price is not None else self.price
+
+    @property
+    def available(self) -> int:
+        """Umumiy mavjud zaxira (faol, o'chirilmagan variantlar bo'yicha)."""
+        return sum(
+            max(v.stock_qty - v.reserved_qty, 0)
+            for v in self.variants
+            if v.is_active and v.deleted_at is None
+        )
 
 
 class Variant(UUIDMixin, TimestampMixin, Base):

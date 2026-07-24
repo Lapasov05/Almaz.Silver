@@ -72,6 +72,6 @@ class PaymentRepository:
 
     async def clear_primary(self) -> None:
         """Barcha kartalardan is_primary ni olib tashlaydi (bitta primary bo'lishi uchun)."""
-        for card in await self.list_cards():
-            if card.is_primary:
-                card.is_primary = False
+        res = await self.db.execute(select(PaymentCard).where(PaymentCard.is_primary.is_(True)))
+        for card in res.scalars().all():
+            card.is_primary = False

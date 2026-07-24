@@ -6,13 +6,11 @@
 - 3 qatlamli qidiruv (TZ 8).
 """
 import uuid
-from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams
 from app.modules.catalog.models import (
     Category,
-    Kurs,
     Product,
     ProductMedia,
     Variant,
@@ -21,8 +19,6 @@ from app.modules.catalog.repository import REFERENCE_MODELS, CatalogRepository
 from app.modules.catalog.schemas import (
     CategoryCreate,
     CategoryUpdate,
-    KursCreate,
-    KursUpdate,
     MediaCreate,
     ProductCreate,
     ProductUpdate,
@@ -32,6 +28,7 @@ from app.modules.catalog.schemas import (
     VariantCreate,
     VariantUpdate,
 )
+from app.modules.settings.repository import SettingsRepository
 from app.modules.catalog.search import extract_shortcode, is_instagram_url, slugify
 
 
@@ -75,109 +72,46 @@ class CatalogService:
         category = Category(name_uz=data.name_uz, name_ru=data.name_ru, slug=slug, parent_id=data.parent_id)
         await self.repo.add(category)
         await self.repo.db.commit()
-        return await self._with_price(category)
+        return category
 
     async def list_categories(self, *, parent_id, q, pp: PageParams):
-        items, total = await self.repo.list_categories(parent_id=parent_id, q=q, pp=pp)
-        for c in items:
-            await self._with_price(c)
-        return items, total
+        return await self.repo.list_categories(parent_id=parent_id, q=q, pp=pp)
 
     async def get_category(self, category_id: uuid.UUID) -> Category:
         category = await self.repo.get_category(category_id)
         if category is None:
             raise NotFoundError("Kategoriya topilmadi")
-        return await self._with_price(category)
+        return category
 
     async def update_category(self, category_id: uuid.UUID, data: CategoryUpdate) -> Category:
         category = await self.get_category(category_id)
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(category, field, value)
         await self.repo.db.commit()
-        return await self._with_price(category)
+        return category
 
     async def delete_category(self, category_id: uuid.UUID) -> None:
         category = await self.get_category(category_id)
         await self.repo.db.delete(category)
         await self.repo.db.commit()
 
-    async def _with_price(self, category: Category) -> Category:
-        """Transient `active_gram_price` — aktiv kursdan (CategoryOut o'qiydi)."""
-        category.active_gram_price = await self.repo.get_active_gram_price(category.id)
-        return category
-
-    # ==================== Kurs (gramm kursi) ====================
-    async def list_kurs(self, *, category_id, is_active, pp: PageParams):
-        return await self.repo.list_kurs(category_id=category_id, is_active=is_active, pp=pp)
-
-    async def get_kurs(self, kurs_id: uuid.UUID) -> Kurs:
-        kurs = await self.repo.get_kurs(kurs_id)
-        if kurs is None:
-            raise NotFoundError("Kurs topilmadi")
-        return kurs
-
-    async def create_kurs(self, data: KursCreate) -> Kurs:
-        if await self.repo.get_category(data.category_id) is None:
-            raise NotFoundError("Kategoriya topilmadi")
-        kurs = Kurs(**data.model_dump())
-        await self.repo.add(kurs)
-        await self.repo.db.commit()
-        return kurs
-
-    async def update_kurs(self, kurs_id: uuid.UUID, data: KursUpdate) -> Kurs:
-        kurs = await self.get_kurs(kurs_id)
-        for field, value in data.model_dump(exclude_unset=True).items():
-            setattr(kurs, field, value)
-        await self.repo.db.commit()
-        return kurs
-
-    async def delete_kurs(self, kurs_id: uuid.UUID) -> None:
-        kurs = await self.get_kurs(kurs_id)
-        await self.repo.db.delete(kurs)
-        await self.repo.db.commit()
-
-    # ==================== Og'irlik kalkulyatori ====================
-    @staticmethod
-    def _calc(gram_price: Decimal, weight_grams: Decimal) -> Decimal:
-        return (gram_price * weight_grams).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-
-    async def calc_price(self, category_id: uuid.UUID, weight_grams: Decimal) -> dict:
-        category = await self.repo.get_category(category_id)
-        if category is None:
-            raise NotFoundError("Kategoriya topilmadi")
-        gram_price = await self.repo.get_active_gram_price(category_id)
-        if gram_price is None:
-            raise AppError("Bu kategoriyада aktiv kurs (gramm narxi) yo'q")
-        return {
-            "category_id": category_id,
-            "gram_price": gram_price,
-            "weight_grams": weight_grams,
-            "price": self._calc(gram_price, weight_grams),
-        }
-
-    async def _resolve_price(self, data: ProductCreate) -> Decimal:
-        if data.price is not None:
-            return data.price
-        if data.category_id is not None and data.weight_grams is not None:
-            gram_price = await self.repo.get_active_gram_price(data.category_id)
-            if gram_price is not None:
-                return self._calc(gram_price, data.weight_grams)
-        raise AppError(
-            "Narx ko'rsatilmagan. Yo `price` bering, yoki kategoriyada aktiv kurs bo'lsin "
-            "va mahsulotда `weight_grams` (kalkulyator)."
-        )
+    # ==================== Sklad: kam qolgan mahsulotlar ====================
+    async def list_low_stock(self, *, status, pp: PageParams):
+        setting = await SettingsRepository(self.repo.db).get("low_stock_threshold")
+        global_threshold = int(setting.value) if setting is not None else 10
+        return await self.repo.list_low_stock(global_threshold=global_threshold, status=status, pp=pp)
 
     # ==================== Product ====================
     async def create_product(self, data: ProductCreate) -> Product:
-        price = await self._resolve_price(data)
-        if data.discount_price is not None and data.discount_price > price:
-            raise AppError("Chegirmali narx asosiy narxdan katta bo'lmasligi kerak")
+        if data.discount_price is not None and data.discount_price > data.price:
+            raise AppError("Chegirma narx asl narxdan katta bo'lmasligi kerak")
         product = Product(
             name_uz=data.name_uz, name_ru=data.name_ru,
             description_uz=data.description_uz, description_ru=data.description_ru,
             category_id=data.category_id, gender_id=data.gender_id,
             material_id=data.material_id, stone_id=data.stone_id,
-            price=price, discount_price=data.discount_price, weight_grams=data.weight_grams,
+            price=data.price, discount_price=data.discount_price,
+            low_stock_threshold=data.low_stock_threshold,
             status=data.status, ai_keywords=data.ai_keywords,
             engraving_available=data.engraving_available, engraving_price=data.engraving_price,
         )
@@ -204,16 +138,10 @@ class CatalogService:
 
     async def update_product(self, product_id: uuid.UUID, data: ProductUpdate) -> Product:
         product = await self.get_product(product_id)
-        payload = data.model_dump(exclude_unset=True)
-        for field, value in payload.items():
+        for field, value in data.model_dump(exclude_unset=True).items():
             setattr(product, field, value)
-        if "price" not in payload and ("weight_grams" in payload or "category_id" in payload):
-            if product.category_id and product.weight_grams:
-                gram_price = await self.repo.get_active_gram_price(product.category_id)
-                if gram_price is not None:
-                    product.price = self._calc(gram_price, product.weight_grams)
         if product.discount_price is not None and product.discount_price > product.price:
-            raise AppError("Chegirmali narx asosiy narxdan katta bo'lmasligi kerak")
+            raise AppError("Chegirma narx asl narxdan katta bo'lmasligi kerak")
         await self.repo.db.commit()
         return await self.get_product(product_id)
 

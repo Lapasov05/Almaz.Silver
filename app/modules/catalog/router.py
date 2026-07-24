@@ -16,12 +16,8 @@ from app.modules.catalog.schemas import (
     CategoryCreate,
     CategoryOut,
     CategoryUpdate,
-    KursCreate,
-    KursOut,
-    KursUpdate,
     MediaCreate,
     MediaOut,
-    PriceCalcOut,
     ProductCreate,
     ProductOut,
     ProductStatus,
@@ -109,45 +105,21 @@ async def delete_category(category_id: uuid.UUID, service: CatalogService = Depe
     await service.delete_category(category_id)
 
 
-# ==================== Kurs (gramm narxi, kategoriyaga ulangan) ====================
-@router.get("/kurs", response_model=Page[KursOut], dependencies=[_VIEW])
-async def list_kurs(category_id: uuid.UUID | None = None, is_active: bool | None = None,
-                    pp: PageParams = Depends(page_params), service: CatalogService = Depends(svc)):
-    items, total = await service.list_kurs(category_id=category_id, is_active=is_active, pp=pp)
-    return Page(items=[KursOut.model_validate(k) for k in items], total=total, limit=pp.limit, offset=pp.offset)
-
-
-@router.get("/kurs/{kurs_id}", response_model=KursOut, dependencies=[_VIEW])
-async def get_kurs(kurs_id: uuid.UUID, service: CatalogService = Depends(svc)):
-    return KursOut.model_validate(await service.get_kurs(kurs_id))
-
-
-@router.post("/kurs", response_model=KursOut, dependencies=[_CREATE])
-async def create_kurs(payload: KursCreate, service: CatalogService = Depends(svc)):
-    return KursOut.model_validate(await service.create_kurs(payload))
-
-
-@router.patch("/kurs/{kurs_id}", response_model=KursOut, dependencies=[_UPDATE])
-async def update_kurs(kurs_id: uuid.UUID, payload: KursUpdate, service: CatalogService = Depends(svc)):
-    return KursOut.model_validate(await service.update_kurs(kurs_id, payload))
-
-
-@router.delete("/kurs/{kurs_id}", status_code=204, dependencies=[_DELETE])
-async def delete_kurs(kurs_id: uuid.UUID, service: CatalogService = Depends(svc)):
-    await service.delete_kurs(kurs_id)
-
-
-@router.get("/price-calc", response_model=PriceCalcOut, dependencies=[_VIEW])
-async def price_calc(category_id: uuid.UUID, weight_grams: Decimal = Query(ge=0),
-                     service: CatalogService = Depends(svc)):
-    """Kategoriyaning aktiv kursi bo'yicha narxni hisoblab beradi (saqlamaydi)."""
-    return PriceCalcOut(**await service.calc_price(category_id, weight_grams))
-
-
 # ==================== Products ====================
 @router.post("/products", response_model=ProductOut, dependencies=[_CREATE])
 async def create_product(payload: ProductCreate, service: CatalogService = Depends(svc)):
     return ProductOut.model_validate(await service.create_product(payload))
+
+
+# Sklad: kam qolgan mahsulotlar (admin qayta zakaz qilishi uchun). /products dan OLDIN bo'lsin.
+@router.get("/products/low-stock", response_model=Page[ProductOut], dependencies=[_VIEW])
+async def low_stock_products(
+    service: CatalogService = Depends(svc),
+    pp: PageParams = Depends(page_params),
+    status: ProductStatus | None = Query(default=None, description="masalan active"),
+):
+    items, total = await service.list_low_stock(status=status.value if status else None, pp=pp)
+    return Page(items=[ProductOut.model_validate(p) for p in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.get("/products", response_model=Page[ProductOut], dependencies=[_VIEW])
