@@ -21,12 +21,12 @@ class RbacService:
         self.audit = AuditService(db)
 
     # ---------- Permissions ----------
-    async def list_permissions(self) -> list[Permission]:
-        return await self.repo.list_permissions()
+    async def list_permissions(self, *, q=None, pp=None):
+        return await self.repo.list_permissions(q=q, pp=pp)
 
     # ---------- Roles ----------
-    async def list_roles(self) -> list[Role]:
-        return await self.repo.list_roles()
+    async def list_roles(self, *, q=None, is_system=None, pp=None):
+        return await self.repo.list_roles(q=q, is_system=is_system, pp=pp)
 
     async def get_role(self, role_id: uuid.UUID) -> Role:
         role = await self.repo.get_role(role_id)
@@ -85,8 +85,8 @@ class RbacService:
         return sorted(found)
 
     # ---------- Users ----------
-    async def list_users(self) -> list[User]:
-        return await self.repo.list_users()
+    async def list_users(self, *, q=None, is_active=None, role_id=None, pp=None):
+        return await self.repo.list_users(q=q, is_active=is_active, role_id=role_id, pp=pp)
 
     async def get_user(self, user_id: uuid.UUID) -> User:
         user = await self.repo.get_user_by_id(user_id)

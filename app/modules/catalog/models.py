@@ -92,10 +92,26 @@ class Category(UUIDMixin, TimestampMixin, Base):
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("category.id", ondelete="SET NULL"), nullable=True
     )
-    # Og'irlik kalkulyatori: 1 gramm narxi (bo'sh bo'lsa kalkulyator ishlamaydi)
-    gram_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     parent: Mapped["Category | None"] = relationship(remote_side="Category.id")
+
+
+class Kurs(UUIDMixin, TimestampMixin, Base):
+    """Gramm kursi (narx/gramm) — kategoriyaga ulangan. Og'irlik kalkulyatori shundan oladi.
+
+    Bir kategoriyaда bir nechta kurs bo'lishi mumkin; kalkulyator eng oxirgi AKTIV kursni oladi.
+    """
+
+    __tablename__ = "kurs"
+
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("category.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    value: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)  # 1 gramm narxi
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    category: Mapped["Category"] = relationship()
 
 
 class Product(UUIDMixin, TimestampMixin, Base):

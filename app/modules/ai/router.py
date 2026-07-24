@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.pagination import Page, PageParams, page_params
 from app.modules.ai.prompts import build_system_prompt
 from app.modules.ai.repository import KnowledgeRepository
 from app.modules.ai.schemas import (
@@ -44,15 +45,17 @@ async def create_knowledge(
 
 @router.get(
     "/knowledge",
-    response_model=list[KnowledgeOut],
+    response_model=Page[KnowledgeOut],
     dependencies=[Depends(require_permission("ai:view"))],
 )
 async def list_knowledge(
     type: KnowledgeType | None = None,
+    q: str | None = None,
+    pp: PageParams = Depends(page_params),
     service: KnowledgeService = Depends(get_knowledge_service),
-) -> list[KnowledgeOut]:
-    items = await service.list_all(type_=type.value if type else None)
-    return [KnowledgeOut.model_validate(k) for k in items]
+) -> Page[KnowledgeOut]:
+    items, total = await service.list_all(type_=type.value if type else None, q=q, pp=pp)
+    return Page(items=[KnowledgeOut.model_validate(k) for k in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.patch(

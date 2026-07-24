@@ -25,8 +25,8 @@ class KnowledgeService:
         await self.repo.db.commit()
         return await self.repo.get(kb.id)
 
-    async def list_all(self, *, type_: str | None = None) -> list[KnowledgeBase]:
-        return await self.repo.list_all(type_=type_)
+    async def list_all(self, *, type_=None, q=None, pp=None):
+        return await self.repo.list_all(type_=type_, q=q, pp=pp)
 
     async def get(self, kb_id: uuid.UUID) -> KnowledgeBase:
         kb = await self.repo.get(kb_id)

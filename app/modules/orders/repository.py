@@ -32,16 +32,30 @@ class OrdersRepository:
     async def list(
         self,
         *,
+        pp=None,
         status: str | None = None,
         customer_id: uuid.UUID | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Order]:
-        stmt = select(Order).options(*_ORDER_LOADERS)
+        assigned_operator_id: uuid.UUID | None = None,
+        created_by_ai: bool | None = None,
+        order_no: str | None = None,
+        date_from=None,
+        date_to=None,
+    ):
+        from app.core.pagination import paginate
+
+        stmt = select(Order)
         if status is not None:
             stmt = stmt.where(Order.status == status)
         if customer_id is not None:
             stmt = stmt.where(Order.customer_id == customer_id)
-        stmt = stmt.order_by(Order.created_at.desc()).limit(limit).offset(offset)
-        res = await self.db.execute(stmt)
-        return list(res.scalars().all())
+        if assigned_operator_id is not None:
+            stmt = stmt.where(Order.assigned_operator_id == assigned_operator_id)
+        if created_by_ai is not None:
+            stmt = stmt.where(Order.created_by_ai.is_(created_by_ai))
+        if order_no:
+            stmt = stmt.where(Order.order_no.ilike(f"%{order_no}%"))
+        if date_from is not None:
+            stmt = stmt.where(Order.created_at >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(Order.created_at <= date_to)
+        return await paginate(self.db, stmt, [Order.created_at.desc()], pp, loaders=_ORDER_LOADERS)

@@ -4,12 +4,14 @@ Tasdiq/rad: `payments:approve` (Finance/Owner/GM). Karta boshqaruvi: `settings:m
 Chek yuklash: `payments:view`.
 """
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.pagination import Page, PageParams, page_params, page_params_ref
 from app.modules.identity.models import User
 from app.modules.payments.models import PaymentStatus
 from app.modules.payments.schemas import (
@@ -38,11 +40,34 @@ def get_card_service(db: AsyncSession = Depends(get_db)) -> PaymentCardService:
 # ==================== Payment cards (asosiy karta) ====================
 @router.get(
     "/cards",
-    response_model=list[PaymentCardOut],
+    response_model=Page[PaymentCardOut],
     dependencies=[Depends(require_permission("payments:view"))],
 )
-async def list_cards(service: PaymentCardService = Depends(get_card_service)) -> list[PaymentCardOut]:
-    return [PaymentCardOut.model_validate(c) for c in await service.list_cards()]
+async def list_cards(
+    is_active: bool | None = None,
+    pp: PageParams = Depends(page_params_ref),
+    service: PaymentCardService = Depends(get_card_service),
+) -> Page[PaymentCardOut]:
+    items, total = await service.list_cards(is_active=is_active, pp=pp)
+    return Page(items=[PaymentCardOut.model_validate(c) for c in items], total=total, limit=pp.limit, offset=pp.offset)
+
+
+@router.get(
+    "/cards/{card_id}",
+    response_model=PaymentCardOut,
+    dependencies=[Depends(require_permission("payments:view"))],
+)
+async def get_card(card_id: uuid.UUID, service: PaymentCardService = Depends(get_card_service)) -> PaymentCardOut:
+    return PaymentCardOut.model_validate(await service.get(card_id))
+
+
+@router.delete(
+    "/cards/{card_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission("settings:manage_settings"))],
+)
+async def delete_card(card_id: uuid.UUID, service: PaymentCardService = Depends(get_card_service)) -> None:
+    await service.delete(card_id)
 
 
 @router.post(
@@ -100,17 +125,23 @@ async def submit_payment(
 
 @router.get(
     "",
-    response_model=list[PaymentOut],
+    response_model=Page[PaymentOut],
     dependencies=[Depends(require_permission("payments:view"))],
 )
 async def list_payments(
     service: PaymentService = Depends(get_payment_service),
+    pp: PageParams = Depends(page_params),
     status: PaymentStatus | None = None,
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> list[PaymentOut]:
-    payments = await service.list(status=status.value if status else None, limit=limit, offset=offset)
-    return [PaymentOut.model_validate(p) for p in payments]
+    order_id: uuid.UUID | None = None,
+    reviewed_by: uuid.UUID | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> Page[PaymentOut]:
+    items, total = await service.list(
+        pp=pp, status=status.value if status else None, order_id=order_id,
+        reviewed_by=reviewed_by, date_from=date_from, date_to=date_to,
+    )
+    return Page(items=[PaymentOut.model_validate(p) for p in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.get(

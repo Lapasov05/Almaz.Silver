@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.pagination import Page, PageParams, page_params
 from app.modules.identity.models import User
+from app.modules.inbox.models import AiState
 from app.modules.inbox.repository import InboxRepository
 from app.modules.inbox.schemas import (
     AssignRequest,
@@ -32,23 +34,26 @@ def get_inbox_service(db: AsyncSession = Depends(get_db)) -> InboxService:
 
 @router.get(
     "/conversations",
-    response_model=list[ConversationOut],
+    response_model=Page[ConversationOut],
     dependencies=[Depends(require_permission("conversations:view"))],
 )
 async def list_conversations(
     service: InboxService = Depends(get_inbox_service),
+    pp: PageParams = Depends(page_params),
     status: ConversationStatus | None = None,
     channel: Channel | None = None,
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> list[ConversationOut]:
-    convs = await service.list_conversations(
-        status=status.value if status else None,
+    ai_state: AiState | None = None,
+    assigned_operator_id: uuid.UUID | None = None,
+    unread_only: bool | None = Query(default=None, description="Faqat o'qilmagan"),
+    q: str | None = Query(default=None, description="Mijoz ismi/username/id bo'yicha"),
+) -> Page[ConversationOut]:
+    items, total = await service.list_conversations(
+        pp=pp, status=status.value if status else None,
         channel=channel.value if channel else None,
-        limit=limit,
-        offset=offset,
+        ai_state=ai_state.value if ai_state else None,
+        assigned_operator_id=assigned_operator_id, unread_only=unread_only, q=q,
     )
-    return [ConversationOut.model_validate(c) for c in convs]
+    return Page(items=[ConversationOut.model_validate(c) for c in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.get(
@@ -64,17 +69,20 @@ async def get_conversation(
 
 @router.get(
     "/conversations/{conversation_id}/messages",
-    response_model=list[MessageOut],
+    response_model=Page[MessageOut],
     dependencies=[Depends(require_permission("conversations:view"))],
 )
 async def list_messages(
     conversation_id: uuid.UUID,
     service: InboxService = Depends(get_inbox_service),
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-) -> list[MessageOut]:
-    msgs = await service.list_messages(conversation_id, limit=limit, offset=offset)
-    return [MessageOut.model_validate(m) for m in msgs]
+    pp: PageParams = Depends(page_params),
+    direction: str | None = Query(default=None, description="incoming | outgoing"),
+    sender_type: str | None = Query(default=None, description="customer | ai | operator | system"),
+) -> Page[MessageOut]:
+    items, total = await service.list_messages(
+        conversation_id, pp=pp, direction=direction, sender_type=sender_type
+    )
+    return Page(items=[MessageOut.model_validate(m) for m in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.post(

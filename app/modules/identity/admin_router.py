@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.pagination import Page, PageParams, page_params, page_params_ref
 from app.modules.identity.models import User
 from app.modules.identity.rbac_service import RbacService
 from app.modules.identity.schemas import (
@@ -34,21 +35,29 @@ def get_rbac_service(db: AsyncSession = Depends(get_db)) -> RbacService:
 # ==================== Permissions (matritsa uchun) ====================
 @router.get(
     "/permissions",
-    response_model=list[PermissionOut],
+    response_model=Page[PermissionOut],
     dependencies=[Depends(require_permission("roles:view"))],
 )
-async def list_permissions(service: RbacService = Depends(get_rbac_service)) -> list[PermissionOut]:
-    return [PermissionOut.model_validate(p) for p in await service.list_permissions()]
+async def list_permissions(
+    q: str | None = None, pp: PageParams = Depends(page_params_ref),
+    service: RbacService = Depends(get_rbac_service),
+) -> Page[PermissionOut]:
+    items, total = await service.list_permissions(q=q, pp=pp)
+    return Page(items=[PermissionOut.model_validate(p) for p in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 # ==================== Roles ====================
 @router.get(
     "/roles",
-    response_model=list[RoleOut],
+    response_model=Page[RoleOut],
     dependencies=[Depends(require_permission("roles:view"))],
 )
-async def list_roles(service: RbacService = Depends(get_rbac_service)) -> list[RoleOut]:
-    return [RoleOut.model_validate(r) for r in await service.list_roles()]
+async def list_roles(
+    q: str | None = None, is_system: bool | None = None,
+    pp: PageParams = Depends(page_params_ref), service: RbacService = Depends(get_rbac_service),
+) -> Page[RoleOut]:
+    items, total = await service.list_roles(q=q, is_system=is_system, pp=pp)
+    return Page(items=[RoleOut.model_validate(r) for r in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.get(
@@ -96,16 +105,22 @@ async def delete_role(
 # ==================== Users (xodimlar) ====================
 @router.get(
     "/users",
-    response_model=list[UserDetailOut],
+    response_model=Page[UserDetailOut],
     dependencies=[Depends(require_permission("employees:view"))],
 )
-async def list_users(service: RbacService = Depends(get_rbac_service)) -> list[UserDetailOut]:
-    users = await service.list_users()
+async def list_users(
+    q: str | None = None,
+    is_active: bool | None = None,
+    role_id: uuid.UUID | None = None,
+    pp: PageParams = Depends(page_params),
+    service: RbacService = Depends(get_rbac_service),
+) -> Page[UserDetailOut]:
+    users, total = await service.list_users(q=q, is_active=is_active, role_id=role_id, pp=pp)
     result = []
     for u in users:
         roles = await service.repo.get_user_roles(u.id)
         result.append(UserDetailOut(id=u.id, full_name=u.full_name, email=u.email, is_active=u.is_active, roles=roles))
-    return result
+    return Page(items=result, total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.post("/users", response_model=UserDetailOut)

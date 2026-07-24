@@ -177,8 +177,19 @@ class PaymentCardService:
         self.db = db
         self.repo = PaymentRepository(db)
 
-    async def list_cards(self):
-        return await self.repo.list_cards()
+    async def list_cards(self, *, is_active=None, pp=None):
+        return await self.repo.list_cards(is_active=is_active, pp=pp)
+
+    async def get(self, card_id: uuid.UUID):
+        card = await self.repo.get_card(card_id)
+        if card is None:
+            raise NotFoundError("Karta topilmadi")
+        return card
+
+    async def delete(self, card_id: uuid.UUID) -> None:
+        card = await self.get(card_id)
+        await self.db.delete(card)
+        await self.db.commit()
 
     async def create(self, data: dict):
         from app.modules.payments.models import PaymentCard

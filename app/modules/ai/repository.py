@@ -19,13 +19,18 @@ class KnowledgeRepository:
     async def get(self, kb_id: uuid.UUID) -> KnowledgeBase | None:
         return await self.db.get(KnowledgeBase, kb_id)
 
-    async def list_all(self, *, type_: str | None = None) -> list[KnowledgeBase]:
+    async def list_all(self, *, type_: str | None = None, q: str | None = None, pp=None):
+        from sqlalchemy import or_
+
+        from app.core.pagination import paginate
+
         stmt = select(KnowledgeBase)
         if type_ is not None:
             stmt = stmt.where(KnowledgeBase.type == type_)
-        stmt = stmt.order_by(KnowledgeBase.type, KnowledgeBase.title)
-        res = await self.db.execute(stmt)
-        return list(res.scalars().all())
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(KnowledgeBase.title.ilike(like), KnowledgeBase.content.ilike(like)))
+        return await paginate(self.db, stmt, [KnowledgeBase.type, KnowledgeBase.title], pp)
 
     async def search_text(self, query: str, limit: int = 3) -> list[KnowledgeBase]:
         """tsvector RAG qidiruvi (TZ 6.3 GIN). Embedding (hnsw) — kalit bo'lganda."""

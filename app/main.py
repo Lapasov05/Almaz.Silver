@@ -28,6 +28,7 @@ from app.modules.audit.router import router as audit_router
 from app.modules.catalog.router import router as catalog_router
 from app.modules.delivery.checkout import router as checkout_router
 from app.modules.delivery.router import router as delivery_router
+from app.modules.files.router import router as files_router
 from app.modules.identity.admin_router import router as rbac_router
 from app.modules.identity.router import router as identity_router
 from app.modules.inbox.router import router as inbox_router
@@ -102,6 +103,10 @@ def create_app() -> FastAPI:
     # --- Statik fayllar (demo mahsulot rasmlari va h.k.): docs/ -> /static ---
     if os.path.isdir("docs"):
         app.mount("/static", StaticFiles(directory="docs"), name="static")
+
+    # --- Yuklangan fayllar (POST /files): upload_dir -> /uploads ---
+    os.makedirs(settings.upload_dir, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=settings.upload_dir), name="uploads")
 
     # TZ 16: har so'rov uchun request_id + strukturaviy log (metod/yo'l/status/vaqt)
     @app.middleware("http")
@@ -192,6 +197,7 @@ def create_app() -> FastAPI:
     app.include_router(analytics_router)
     app.include_router(audit_router)
     app.include_router(notifications_router)
+    app.include_router(files_router)
 
     return app
 

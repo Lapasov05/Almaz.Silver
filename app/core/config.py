@@ -78,6 +78,10 @@ class Settings(BaseSettings):
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    # --- File upload (POST /files -> URL) ---
+    upload_dir: str = "/code/uploads"   # volume; nginx orqali /uploads bilan ochiladi
+    upload_max_mb: int = 10
+
     # --- API hujjatlari (/docs, /redoc, /openapi.json) himoyasi ---
     docs_auth_enabled: bool = True
     docs_username: str = "admin"

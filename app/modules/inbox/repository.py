@@ -1,10 +1,11 @@
 """inbox Repository qatlami — DB kirish."""
 import uuid
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.pagination import PageParams, paginate
 from app.modules.inbox.models import Conversation, Customer, Message
 from app.modules.settings.models import Setting
 
@@ -53,38 +54,53 @@ class InboxRepository:
     async def list_conversations(
         self,
         *,
+        pp: PageParams,
         status: str | None = None,
         channel: str | None = None,
+        ai_state: str | None = None,
         assigned_operator_id: uuid.UUID | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Conversation]:
-        stmt = select(Conversation).options(selectinload(Conversation.customer))
+        unread_only: bool | None = None,
+        q: str | None = None,
+    ):
+        stmt = select(Conversation)
         if status is not None:
             stmt = stmt.where(Conversation.status == status)
         if channel is not None:
             stmt = stmt.where(Conversation.channel == channel)
+        if ai_state is not None:
+            stmt = stmt.where(Conversation.ai_state == ai_state)
         if assigned_operator_id is not None:
             stmt = stmt.where(Conversation.assigned_operator_id == assigned_operator_id)
-        stmt = stmt.order_by(Conversation.last_activity_at.desc()).limit(limit).offset(offset)
-        res = await self.db.execute(stmt)
-        return list(res.scalars().all())
+        if unread_only:
+            stmt = stmt.where(Conversation.unread_count > 0)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.join(Customer, Customer.id == Conversation.customer_id).where(
+                or_(Customer.full_name.ilike(like), Customer.username.ilike(like), Customer.external_id.ilike(like))
+            )
+        return await paginate(
+            self.db, stmt, [Conversation.last_activity_at.desc()], pp,
+            loaders=(selectinload(Conversation.customer),),
+        )
 
     # ---------- Message ----------
     async def get_message(self, message_id: uuid.UUID) -> Message | None:
         return await self.db.get(Message, message_id)
 
     async def list_messages(
-        self, conversation_id: uuid.UUID, *, limit: int = 100, offset: int = 0
-    ) -> list[Message]:
-        res = await self.db.execute(
-            select(Message)
-            .where(Message.conversation_id == conversation_id)
-            .order_by(Message.created_at.asc())
-            .limit(limit)
-            .offset(offset)
-        )
-        return list(res.scalars().all())
+        self,
+        conversation_id: uuid.UUID,
+        *,
+        pp: PageParams,
+        direction: str | None = None,
+        sender_type: str | None = None,
+    ):
+        stmt = select(Message).where(Message.conversation_id == conversation_id)
+        if direction is not None:
+            stmt = stmt.where(Message.direction == direction)
+        if sender_type is not None:
+            stmt = stmt.where(Message.sender_type == sender_type)
+        return await paginate(self.db, stmt, [Message.created_at.asc()], pp)
 
     async def list_recent_messages(self, conversation_id: uuid.UUID, limit: int) -> list[Message]:
         """Oxirgi N xabar (AI xotirasi uchun), xronologik tartibда (TZ 7.3)."""

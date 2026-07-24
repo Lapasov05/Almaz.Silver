@@ -53,17 +53,27 @@ class IdentityRepository:
         await self.db.flush()
         return obj
 
-    async def list_permissions(self) -> list[Permission]:
-        res = await self.db.execute(select(Permission).order_by(Permission.code))
-        return list(res.scalars().all())
+    async def list_permissions(self, *, q: str | None = None, pp=None):
+        from app.core.pagination import paginate
+
+        stmt = select(Permission)
+        if q:
+            stmt = stmt.where(Permission.code.ilike(f"%{q}%"))
+        return await paginate(self.db, stmt, [Permission.code], pp)
 
     async def get_permissions_by_codes(self, codes: list[str]) -> list[Permission]:
         res = await self.db.execute(select(Permission).where(Permission.code.in_(codes)))
         return list(res.scalars().all())
 
-    async def list_roles(self) -> list[Role]:
-        res = await self.db.execute(select(Role).order_by(Role.name))
-        return list(res.scalars().all())
+    async def list_roles(self, *, q: str | None = None, is_system: bool | None = None, pp=None):
+        from app.core.pagination import paginate
+
+        stmt = select(Role)
+        if q:
+            stmt = stmt.where(Role.name.ilike(f"%{q}%"))
+        if is_system is not None:
+            stmt = stmt.where(Role.is_system.is_(is_system))
+        return await paginate(self.db, stmt, [Role.name], pp)
 
     async def get_role(self, role_id: uuid.UUID) -> Role | None:
         return await self.db.get(Role, role_id)
@@ -88,13 +98,23 @@ class IdentityRepository:
             self.db.add(RolePermission(role_id=role_id, permission_id=pid))
         await self.db.flush()
 
-    async def list_users(self, *, include_deleted: bool = False) -> list[User]:
+    async def list_users(self, *, q: str | None = None, is_active: bool | None = None,
+                          role_id: uuid.UUID | None = None, include_deleted: bool = False, pp=None):
+        from sqlalchemy import or_
+
+        from app.core.pagination import paginate
+
         stmt = select(User)
         if not include_deleted:
             stmt = stmt.where(User.deleted_at.is_(None))
-        stmt = stmt.order_by(User.full_name)
-        res = await self.db.execute(stmt)
-        return list(res.scalars().all())
+        if is_active is not None:
+            stmt = stmt.where(User.is_active.is_(is_active))
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(User.full_name.ilike(like), User.email.ilike(like)))
+        if role_id is not None:
+            stmt = stmt.where(User.id.in_(select(UserRole.user_id).where(UserRole.role_id == role_id)))
+        return await paginate(self.db, stmt, [User.full_name], pp)
 
     async def replace_user_roles(self, user_id: uuid.UUID, role_ids: list[uuid.UUID]) -> None:
         await self.db.execute(delete(UserRole).where(UserRole.user_id == user_id))

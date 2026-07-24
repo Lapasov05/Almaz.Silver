@@ -1,11 +1,13 @@
 """orders CRM API (TZ 10), RBAC bilan himoyalangan."""
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.pagination import Page, PageParams, page_params
 from app.modules.identity.models import User
 from app.modules.orders.models import OrderStatus
 from app.modules.orders.schemas import OrderCancel, OrderCreate, OrderOut
@@ -30,17 +32,26 @@ async def create_order(
 
 @router.get(
     "",
-    response_model=list[OrderOut],
+    response_model=Page[OrderOut],
     dependencies=[Depends(require_permission("orders:view"))],
 )
 async def list_orders(
     service: OrdersService = Depends(get_orders_service),
+    pp: PageParams = Depends(page_params),
     status: OrderStatus | None = None,
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> list[OrderOut]:
-    orders = await service.list(status=status.value if status else None, limit=limit, offset=offset)
-    return [OrderOut.model_validate(o) for o in orders]
+    customer_id: uuid.UUID | None = None,
+    assigned_operator_id: uuid.UUID | None = None,
+    created_by_ai: bool | None = None,
+    order_no: str | None = Query(default=None, description="Buyurtma raqami bo'yicha"),
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> Page[OrderOut]:
+    items, total = await service.list(
+        pp=pp, status=status.value if status else None, customer_id=customer_id,
+        assigned_operator_id=assigned_operator_id, created_by_ai=created_by_ai,
+        order_no=order_no, date_from=date_from, date_to=date_to,
+    )
+    return Page(items=[OrderOut.model_validate(o) for o in items], total=total, limit=pp.limit, offset=pp.offset)
 
 
 @router.get(

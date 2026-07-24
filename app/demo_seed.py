@@ -21,6 +21,7 @@ from app.modules.catalog.models import Gender, Material, Stone
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.catalog.schemas import (
     CategoryCreate,
+    KursCreate,
     MediaCreate,
     ProductCreate,
     VariantCreate,
@@ -138,12 +139,13 @@ async def seed_catalog(db) -> dict[str, object]:
     material_id = (await db.execute(select(Material.id))).scalars().first()
     stone_id = (await db.execute(select(Stone.id))).scalars().first()
     gmap = {"erkak": genders.get("Erkak"), "ayol": genders.get("Ayol"), "uniseks": genders.get("Uniseks")}
-    # Kategoriya + gramm narxi (og'irlik kalkulyatori uchun)
+    # Kategoriya + kurs (gramm narxi — og'irlik kalkulyatori uchun)
     gram_prices = {"Uzuklar": 150000, "Brasletlar": 120000, "Sepochkalar": 110000, "Komplektlar": 130000}
     cats = {}
     for name in DEMO_CATEGORIES:
-        cats[name] = await catalog.create_category(CategoryCreate(
-            name_uz=name, name_ru=name, gram_price=Decimal(str(gram_prices[name]))))
+        cats[name] = await catalog.create_category(CategoryCreate(name_uz=name, name_ru=name))
+        await catalog.create_kurs(KursCreate(
+            category_id=cats[name].id, value=Decimal(str(gram_prices[name])), is_active=True, note="demo kurs"))
     products = {}
     for (cat, name, gender, price, old, stock, eng_av, eng_price, shortcode, kw) in DEMO_PRODUCTS:
         p = await catalog.create_product(ProductCreate(

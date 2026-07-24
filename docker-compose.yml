@@ -74,6 +74,8 @@ services:
       # e'tiborsiz qoldiradi va redirect'lar https o'rniga http bo'lib, brauzer
       # "mixed content" xatosi beradi. Faqat ichki docker tarmog'idan kelgani uchun xavfsiz.
       FORWARDED_ALLOW_IPS: "*"
+    volumes:
+      - uploads_data:/code/uploads      # POST /files yuklangan fayllar (saqlanadi)
     # Migratsiya -> seed -> server. Dev uchun qulay; prod'da migratsiya alohida qadam bo'ladi.
     command: >
       sh -c "alembic upgrade head &&
@@ -130,3 +132,4 @@ services:
 volumes:
   postgres_data:
   minio_data:
+  uploads_data:

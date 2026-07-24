@@ -1,13 +1,16 @@
-"""catalog Repository qatlami — DB kirish + qidiruv (TZ 6.3 / 8)."""
+"""catalog Repository qatlami — DB kirish + filtrlangan pagination (TZ 6.3 / 8)."""
 import uuid
+from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.pagination import PageParams, paginate
 from app.modules.catalog.models import (
     Category,
     Gender,
+    Kurs,
     Material,
     Product,
     ProductMedia,
@@ -15,7 +18,6 @@ from app.modules.catalog.models import (
     Variant,
 )
 
-# Async'da relationlarni oldindan yuklash (lazy load I/O'siz)
 _PRODUCT_LOADERS = (
     selectinload(Product.variants),
     selectinload(Product.media),
@@ -24,7 +26,6 @@ _PRODUCT_LOADERS = (
     selectinload(Product.stone),
 )
 
-# Reference jadval nomi -> model
 REFERENCE_MODELS = {"gender": Gender, "material": Material, "stone": Stone}
 
 
@@ -38,14 +39,15 @@ class CatalogRepository:
         return obj
 
     # ---------- Reference (gender / material / stone) ----------
-    async def list_reference(self, kind: str, *, only_active: bool = False) -> list:
+    async def list_reference(self, kind: str, *, only_active: bool, q: str | None, pp: PageParams):
         model = REFERENCE_MODELS[kind]
         stmt = select(model)
         if only_active:
             stmt = stmt.where(model.is_active.is_(True))
-        stmt = stmt.order_by(model.sort_order, model.name_uz)
-        res = await self.db.execute(stmt)
-        return list(res.scalars().all())
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(model.name_uz.ilike(like), model.name_ru.ilike(like)))
+        return await paginate(self.db, stmt, [model.sort_order, model.name_uz], pp)
 
     async def get_reference(self, kind: str, ref_id: uuid.UUID):
         return await self.db.get(REFERENCE_MODELS[kind], ref_id)
@@ -58,15 +60,41 @@ class CatalogRepository:
         res = await self.db.execute(select(Category).where(Category.slug == slug))
         return res.scalar_one_or_none()
 
-    async def list_categories(self) -> list[Category]:
-        res = await self.db.execute(select(Category).order_by(Category.name_uz))
-        return list(res.scalars().all())
+    async def list_categories(self, *, parent_id: uuid.UUID | None, q: str | None, pp: PageParams):
+        stmt = select(Category)
+        if parent_id is not None:
+            stmt = stmt.where(Category.parent_id == parent_id)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(Category.name_uz.ilike(like), Category.name_ru.ilike(like)))
+        return await paginate(self.db, stmt, [Category.name_uz], pp)
+
+    # ---------- Kurs (gramm kursi) ----------
+    async def get_kurs(self, kurs_id: uuid.UUID) -> Kurs | None:
+        return await self.db.get(Kurs, kurs_id)
+
+    async def list_kurs(self, *, category_id: uuid.UUID | None, is_active: bool | None, pp: PageParams):
+        stmt = select(Kurs)
+        if category_id is not None:
+            stmt = stmt.where(Kurs.category_id == category_id)
+        if is_active is not None:
+            stmt = stmt.where(Kurs.is_active.is_(is_active))
+        return await paginate(self.db, stmt, [Kurs.created_at.desc()], pp)
+
+    async def get_active_gram_price(self, category_id: uuid.UUID) -> Decimal | None:
+        """Kategoriyaning eng oxirgi AKTIV kursi (gramm narxi)."""
+        res = await self.db.execute(
+            select(Kurs.value)
+            .where(Kurs.category_id == category_id, Kurs.is_active.is_(True))
+            .order_by(Kurs.created_at.desc())
+            .limit(1)
+        )
+        return res.scalar_one_or_none()
 
     # ---------- Product ----------
     async def get_product(self, product_id: uuid.UUID) -> Product | None:
         res = await self.db.execute(
-            select(Product)
-            .options(*_PRODUCT_LOADERS)
+            select(Product).options(*_PRODUCT_LOADERS)
             .where(Product.id == product_id, Product.deleted_at.is_(None))
         )
         return res.scalar_one_or_none()
@@ -74,22 +102,51 @@ class CatalogRepository:
     async def list_products(
         self,
         *,
+        pp: PageParams,
         status: str | None = None,
         category_id: uuid.UUID | None = None,
         gender_id: uuid.UUID | None = None,
-        limit: int = 50,
-        offset: int = 0,
-    ) -> list[Product]:
-        stmt = select(Product).options(*_PRODUCT_LOADERS).where(Product.deleted_at.is_(None))
+        material_id: uuid.UUID | None = None,
+        stone_id: uuid.UUID | None = None,
+        engraving_available: bool | None = None,
+        min_price: Decimal | None = None,
+        max_price: Decimal | None = None,
+        in_stock: bool | None = None,
+        q: str | None = None,
+    ):
+        stmt = select(Product).where(Product.deleted_at.is_(None))
         if status is not None:
             stmt = stmt.where(Product.status == status)
         if category_id is not None:
             stmt = stmt.where(Product.category_id == category_id)
         if gender_id is not None:
             stmt = stmt.where(Product.gender_id == gender_id)
-        stmt = stmt.order_by(Product.created_at.desc()).limit(limit).offset(offset)
-        res = await self.db.execute(stmt)
-        return list(res.scalars().all())
+        if material_id is not None:
+            stmt = stmt.where(Product.material_id == material_id)
+        if stone_id is not None:
+            stmt = stmt.where(Product.stone_id == stone_id)
+        if engraving_available is not None:
+            stmt = stmt.where(Product.engraving_available.is_(engraving_available))
+        # Narx filtri amaldagi (effective) narx bo'yicha: coalesce(discount_price, price)
+        eff = func.coalesce(Product.discount_price, Product.price)
+        if min_price is not None:
+            stmt = stmt.where(eff >= min_price)
+        if max_price is not None:
+            stmt = stmt.where(eff <= max_price)
+        if in_stock:
+            stmt = stmt.where(
+                Product.id.in_(
+                    select(Variant.product_id).where(
+                        Variant.deleted_at.is_(None),
+                        Variant.is_active.is_(True),
+                        (Variant.stock_qty - Variant.reserved_qty) > 0,
+                    )
+                )
+            )
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(Product.name_uz.ilike(like), Product.name_ru.ilike(like)))
+        return await paginate(self.db, stmt, [Product.created_at.desc()], pp, loaders=_PRODUCT_LOADERS)
 
     # ---------- Variant ----------
     async def get_variant(self, variant_id: uuid.UUID) -> Variant | None:
@@ -113,8 +170,7 @@ class CatalogRepository:
 
     async def get_product_by_shortcode(self, shortcode: str) -> Product | None:
         res = await self.db.execute(
-            select(Product)
-            .options(*_PRODUCT_LOADERS)
+            select(Product).options(*_PRODUCT_LOADERS)
             .join(ProductMedia, ProductMedia.product_id == Product.id)
             .where(ProductMedia.shortcode == shortcode, Product.deleted_at.is_(None))
         )

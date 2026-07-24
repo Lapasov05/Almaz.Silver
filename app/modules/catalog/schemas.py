@@ -42,7 +42,6 @@ class CategoryCreate(BaseModel):
     name_ru: str | None = Field(default=None, max_length=150)
     slug: str | None = Field(default=None, max_length=150)  # bo'sh -> name_uz'dan
     parent_id: uuid.UUID | None = None
-    gram_price: Decimal | None = Field(default=None, ge=0)  # og'irlik kalkulyatori
 
 
 class CategoryUpdate(BaseModel):
@@ -50,7 +49,6 @@ class CategoryUpdate(BaseModel):
     name_ru: str | None = Field(default=None, max_length=150)
     slug: str | None = Field(default=None, max_length=150)
     parent_id: uuid.UUID | None = None
-    gram_price: Decimal | None = Field(default=None, ge=0)
 
 
 class CategoryOut(BaseModel):
@@ -61,7 +59,31 @@ class CategoryOut(BaseModel):
     name_ru: str | None
     slug: str
     parent_id: uuid.UUID | None
-    gram_price: Decimal | None
+    active_gram_price: Decimal | None = None  # kategoriyaning aktiv kursi (kalkulyator uchun)
+
+
+# ---------- Kurs (gramm kursi) ----------
+class KursCreate(BaseModel):
+    category_id: uuid.UUID
+    value: Decimal = Field(ge=0)  # 1 gramm narxi
+    is_active: bool = True
+    note: str | None = Field(default=None, max_length=255)
+
+
+class KursUpdate(BaseModel):
+    value: Decimal | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+    note: str | None = Field(default=None, max_length=255)
+
+
+class KursOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    category_id: uuid.UUID
+    value: Decimal
+    is_active: bool
+    note: str | None
 
 
 # ---------- Variant ----------

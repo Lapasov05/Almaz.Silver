@@ -9,6 +9,7 @@ from datetime import datetime
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.pagination import Page, PageParams, page_params, paginate
 from app.modules.notifications.models import Notification
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -30,15 +31,22 @@ class NotificationOut(BaseModel):
 
 @router.get(
     "",
-    response_model=list[NotificationOut],
+    response_model=Page[NotificationOut],
     dependencies=[Depends(require_permission("payments:view"))],
 )
 async def list_notifications(
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-) -> list[NotificationOut]:
-    res = await db.execute(
-        select(Notification).order_by(Notification.created_at.desc()).limit(limit).offset(offset)
-    )
-    return [NotificationOut.model_validate(n) for n in res.scalars().all()]
+    pp: PageParams = Depends(page_params),
+    type: str | None = None,
+    status: str | None = None,
+    channel: str | None = None,
+) -> Page[NotificationOut]:
+    stmt = select(Notification)
+    if type is not None:
+        stmt = stmt.where(Notification.type == type)
+    if status is not None:
+        stmt = stmt.where(Notification.status == status)
+    if channel is not None:
+        stmt = stmt.where(Notification.channel == channel)
+    items, total = await paginate(db, stmt, [Notification.created_at.desc()], pp)
+    return Page(items=[NotificationOut.model_validate(n) for n in items], total=total, limit=pp.limit, offset=pp.offset)

@@ -38,19 +38,31 @@ class AuditService:
     async def list(
         self,
         *,
+        pp=None,
         action: str | None = None,
         entity_type: str | None = None,
+        entity_id: uuid.UUID | None = None,
         actor_id: uuid.UUID | None = None,
-        limit: int = 100,
-        offset: int = 0,
-    ) -> list[AuditLog]:
+        date_from=None,
+        date_to=None,
+    ):
+        from app.core.pagination import PageParams, paginate
+
         stmt = select(AuditLog)
         if action is not None:
             stmt = stmt.where(AuditLog.action == action)
         if entity_type is not None:
             stmt = stmt.where(AuditLog.entity_type == entity_type)
+        if entity_id is not None:
+            stmt = stmt.where(AuditLog.entity_id == entity_id)
         if actor_id is not None:
             stmt = stmt.where(AuditLog.actor_id == actor_id)
-        stmt = stmt.order_by(AuditLog.created_at.desc()).limit(limit).offset(offset)
-        res = await self.db.execute(stmt)
-        return list(res.scalars().all())
+        if date_from is not None:
+            stmt = stmt.where(AuditLog.created_at >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(AuditLog.created_at <= date_to)
+        if pp is None:  # ichki chaqiruvlar uchun (test/smoke) — oddiy ro'yxat
+            pp = PageParams(limit=100, offset=0)
+            items, _ = await paginate(self.db, stmt, [AuditLog.created_at.desc()], pp)
+            return items
+        return await paginate(self.db, stmt, [AuditLog.created_at.desc()], pp)
