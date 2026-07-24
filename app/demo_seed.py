@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.modules.ai.models import KnowledgeBase
+from app.modules.catalog.models import Gender, Material, Stone
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.catalog.schemas import (
     CategoryCreate,
@@ -132,16 +133,27 @@ async def seed_custom_role(db, actor_id) -> None:
 
 async def seed_catalog(db) -> dict[str, object]:
     catalog = CatalogService(CatalogRepository(db))
+    # Reference lug'atlar (asosiy seed'da yaratilgan)
+    genders = {g.name_uz: g.id for g in (await db.execute(select(Gender))).scalars()}
+    material_id = (await db.execute(select(Material.id))).scalars().first()
+    stone_id = (await db.execute(select(Stone.id))).scalars().first()
+    gmap = {"erkak": genders.get("Erkak"), "ayol": genders.get("Ayol"), "uniseks": genders.get("Uniseks")}
+    # Kategoriya + gramm narxi (og'irlik kalkulyatori uchun)
+    gram_prices = {"Uzuklar": 150000, "Brasletlar": 120000, "Sepochkalar": 110000, "Komplektlar": 130000}
     cats = {}
     for name in DEMO_CATEGORIES:
-        cats[name] = await catalog.create_category(CategoryCreate(name=name))
+        cats[name] = await catalog.create_category(CategoryCreate(
+            name_uz=name, name_ru=name, gram_price=Decimal(str(gram_prices[name]))))
     products = {}
     for (cat, name, gender, price, old, stock, eng_av, eng_price, shortcode, kw) in DEMO_PRODUCTS:
         p = await catalog.create_product(ProductCreate(
-            name=name, category_id=cats[cat].id, gender=gender,
-            price=Decimal(str(price)), compare_at_price=Decimal(str(old)),
+            name_uz=name, name_ru=name, category_id=cats[cat].id,
+            gender_id=gmap.get(gender), material_id=material_id, stone_id=stone_id,
+            price=Decimal(str(old)), discount_price=Decimal(str(price)),
+            weight_grams=Decimal("3.5"),
             status="active", ai_keywords=kw,
-            description=f"{name} — Kumush 925 proba + rodiy qoplama, serkon toshli.",
+            description_uz=f"{name} — Kumush 925 proba + rodiy qoplama, serkon toshli.",
+            description_ru=f"{name} — Серебро 925 + родий, камень серкон.",
             engraving_available=eng_av,
             engraving_price=Decimal(str(eng_price)) if eng_price else None,
             variants=[VariantCreate(stock_qty=stock)],

@@ -1,11 +1,12 @@
-"""catalog Service qatlami — biznes logika (TZ 8-bo'lim).
+"""catalog Service qatlami — biznes logika (TZ 8).
 
-- Universal "mahsulot qo'shish": product + variantlar + media bitta oqimda.
-- Default variant (TZ muhim qaror 1): variant berilmasa, 1 ta default variant yaratiladi.
-- 3 qatlamli qidiruv (TZ 8): (1) SKU/barcode → (2) IG shortcode → (3) tsvector.
+- Reference lug'atlar (gender/material/stone) CRUD.
+- Ko'p tilli mahsulot; narx: asosiy + chegirmali (mijoz `effective_price` to'laydi).
+- Og'irlik kalkulyatori: narx berilmasa `category.gram_price * weight_grams`.
+- 3 qatlamli qidiruv (TZ 8): SKU/barcode -> IG shortcode -> tsvector.
 """
 import uuid
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from app.core.exceptions import AppError, NotFoundError
 from app.modules.catalog.models import (
@@ -14,13 +15,15 @@ from app.modules.catalog.models import (
     ProductMedia,
     Variant,
 )
-from app.modules.catalog.repository import CatalogRepository
+from app.modules.catalog.repository import REFERENCE_MODELS, CatalogRepository
 from app.modules.catalog.schemas import (
     CategoryCreate,
     CategoryUpdate,
     MediaCreate,
     ProductCreate,
     ProductUpdate,
+    ReferenceCreate,
+    ReferenceUpdate,
     StockAdjust,
     VariantCreate,
     VariantUpdate,
@@ -32,12 +35,43 @@ class CatalogService:
     def __init__(self, repo: CatalogRepository):
         self.repo = repo
 
-    # ---------- Category ----------
+    # ==================== Reference (gender / material / stone) ====================
+    async def list_reference(self, kind: str, *, only_active: bool = False) -> list:
+        return await self.repo.list_reference(kind, only_active=only_active)
+
+    async def get_reference(self, kind: str, ref_id: uuid.UUID):
+        item = await self.repo.get_reference(kind, ref_id)
+        if item is None:
+            raise NotFoundError(f"{kind} topilmadi")
+        return item
+
+    async def create_reference(self, kind: str, data: ReferenceCreate):
+        item = REFERENCE_MODELS[kind](**data.model_dump())
+        await self.repo.add(item)
+        await self.repo.db.commit()
+        return item
+
+    async def update_reference(self, kind: str, ref_id: uuid.UUID, data: ReferenceUpdate):
+        item = await self.get_reference(kind, ref_id)
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(item, field, value)
+        await self.repo.db.commit()
+        return item
+
+    async def delete_reference(self, kind: str, ref_id: uuid.UUID) -> None:
+        item = await self.get_reference(kind, ref_id)
+        await self.repo.db.delete(item)
+        await self.repo.db.commit()
+
+    # ==================== Category ====================
     async def create_category(self, data: CategoryCreate) -> Category:
-        slug = data.slug or slugify(data.name)
+        slug = data.slug or slugify(data.name_uz)
         if await self.repo.get_category_by_slug(slug) is not None:
             raise AppError(f"Bu slug band: {slug}")
-        category = Category(name=data.name, slug=slug, parent_id=data.parent_id)
+        category = Category(
+            name_uz=data.name_uz, name_ru=data.name_ru, slug=slug,
+            parent_id=data.parent_id, gram_price=data.gram_price,
+        )
         await self.repo.add(category)
         await self.repo.db.commit()
         return category
@@ -45,49 +79,80 @@ class CatalogService:
     async def list_categories(self) -> list[Category]:
         return await self.repo.list_categories()
 
-    async def update_category(self, category_id: uuid.UUID, data: CategoryUpdate) -> Category:
+    async def get_category(self, category_id: uuid.UUID) -> Category:
         category = await self.repo.get_category(category_id)
         if category is None:
             raise NotFoundError("Kategoriya topilmadi")
+        return category
+
+    async def update_category(self, category_id: uuid.UUID, data: CategoryUpdate) -> Category:
+        category = await self.get_category(category_id)
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(category, field, value)
         await self.repo.db.commit()
         return category
 
     async def delete_category(self, category_id: uuid.UUID) -> None:
-        category = await self.repo.get_category(category_id)
-        if category is None:
-            raise NotFoundError("Kategoriya topilmadi")
+        category = await self.get_category(category_id)
         await self.repo.db.delete(category)
         await self.repo.db.commit()
 
-    # ---------- Product ----------
+    # ==================== Og'irlik kalkulyatori ====================
+    @staticmethod
+    def _calc_price(gram_price: Decimal, weight_grams: Decimal) -> Decimal:
+        return (gram_price * weight_grams).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    async def calc_price(self, category_id: uuid.UUID, weight_grams: Decimal) -> dict:
+        """Kategoriya gramm narxi bo'yicha narxni hisoblab beradi (oldindan ko'rish)."""
+        category = await self.get_category(category_id)
+        if category.gram_price is None:
+            raise AppError("Bu kategoriyada gramm narxi (gram_price) belgilanmagan")
+        return {
+            "category_id": category.id,
+            "gram_price": category.gram_price,
+            "weight_grams": weight_grams,
+            "price": self._calc_price(category.gram_price, weight_grams),
+        }
+
+    async def _resolve_price(self, data: ProductCreate) -> Decimal:
+        """Narx: qo'lda berilgan bo'lsa o'sha; aks holda og'irlik x gramm narxi."""
+        if data.price is not None:
+            return data.price
+        if data.category_id is not None and data.weight_grams is not None:
+            category = await self.repo.get_category(data.category_id)
+            if category is not None and category.gram_price is not None:
+                return self._calc_price(category.gram_price, data.weight_grams)
+        raise AppError(
+            "Narx ko'rsatilmagan. Yo `price` bering, yoki kategoriyada `gram_price` "
+            "va mahsulotда `weight_grams` bo'lsin (kalkulyator)."
+        )
+
+    # ==================== Product ====================
     async def create_product(self, data: ProductCreate) -> Product:
+        price = await self._resolve_price(data)
+        if data.discount_price is not None and data.discount_price > price:
+            raise AppError("Chegirmali narx asosiy narxdan katta bo'lmasligi kerak")
+
         product = Product(
-            name=data.name,
-            category_id=data.category_id,
-            gender=data.gender,
-            material=data.material,
-            stone=data.stone,
-            price=data.price,
-            compare_at_price=data.compare_at_price,
-            status=data.status,
-            description=data.description,
-            ai_keywords=data.ai_keywords,
-            engraving_available=data.engraving_available,
-            engraving_price=data.engraving_price,
+            name_uz=data.name_uz, name_ru=data.name_ru,
+            description_uz=data.description_uz, description_ru=data.description_ru,
+            category_id=data.category_id, gender_id=data.gender_id,
+            material_id=data.material_id, stone_id=data.stone_id,
+            price=price, discount_price=data.discount_price, weight_grams=data.weight_grams,
+            status=data.status, ai_keywords=data.ai_keywords,
+            engraving_available=data.engraving_available, engraving_price=data.engraving_price,
         )
         # Variantlar: berilganini ishlat, bo'lmasa 1 ta default (TZ muhim qaror 1)
-        variant_inputs = data.variants or [VariantCreate()]
-        for vin in variant_inputs:
-            product.variants.append(self._build_variant(vin, data.name))
-        # Media (IG shortcode ajratiladi)
-        for min_ in data.media or []:
+        for vin in (data.variants or [VariantCreate()]):
+            product.variants.append(self._build_variant(vin, data.name_uz))
+        # Media: to'liq obyekt yoki oddiy URL ro'yxati
+        for min_ in (data.media or []):
             product.media.append(self._build_media(min_))
+        for url in (data.image_urls or []):
+            product.media.append(self._build_media(MediaCreate(image_url=url)))
 
         await self.repo.add(product)
         await self.repo.db.commit()
-        # search_vector va default'lar DB tomonidan to'ldirilgani uchun qayta yuklaymiz
         refreshed = await self.repo.get_product(product.id)
         assert refreshed is not None
         return refreshed
@@ -103,20 +168,28 @@ class CatalogService:
 
     async def update_product(self, product_id: uuid.UUID, data: ProductUpdate) -> Product:
         product = await self.get_product(product_id)
-        for field, value in data.model_dump(exclude_unset=True).items():
+        payload = data.model_dump(exclude_unset=True)
+        for field, value in payload.items():
             setattr(product, field, value)
+        # Og'irlik/kategoriya o'zgarsa va narx qo'lda berilmagan bo'lsa — qayta hisoblash
+        if "price" not in payload and ("weight_grams" in payload or "category_id" in payload):
+            if product.category_id and product.weight_grams:
+                category = await self.repo.get_category(product.category_id)
+                if category is not None and category.gram_price is not None:
+                    product.price = self._calc_price(category.gram_price, product.weight_grams)
+        if product.discount_price is not None and product.discount_price > product.price:
+            raise AppError("Chegirmali narx asosiy narxdan katta bo'lmasligi kerak")
         await self.repo.db.commit()
         return await self.get_product(product_id)
 
     async def delete_product(self, product_id: uuid.UUID) -> None:
-        """Soft delete (TZ 6.1) — deleted_at to'ldiriladi."""
         product = await self.get_product(product_id)
         product.deleted_at = _utcnow()
         for variant in product.variants:
             variant.deleted_at = product.deleted_at
         await self.repo.db.commit()
 
-    # ---------- Variant ----------
+    # ==================== Variant ====================
     def _build_variant(self, data: VariantCreate, product_name: str) -> Variant:
         return Variant(
             sku=data.sku or self._generate_sku(product_name),
@@ -133,7 +206,7 @@ class CatalogService:
 
     async def add_variant(self, product_id: uuid.UUID, data: VariantCreate) -> Variant:
         product = await self.get_product(product_id)
-        variant = self._build_variant(data, product.name)
+        variant = self._build_variant(data, product.name_uz)
         variant.product_id = product.id
         await self.repo.add(variant)
         await self.repo.db.commit()
@@ -149,10 +222,6 @@ class CatalogService:
         return variant
 
     async def adjust_stock(self, variant_id: uuid.UUID, data: StockAdjust) -> Variant:
-        """Zaxirani o'rnatish (stock_qty) yoki nisbiy o'zgartirish (delta).
-
-        Eslatma: reservation transitions (reserved_qty) — Faza 4 (orders).
-        """
         variant = await self.repo.get_variant(variant_id)
         if variant is None:
             raise NotFoundError("Variant topilmadi")
@@ -168,17 +237,12 @@ class CatalogService:
         await self.repo.db.commit()
         return variant
 
-    # ---------- Media ----------
+    # ==================== Media ====================
     def _build_media(self, data: MediaCreate) -> ProductMedia:
-        shortcode = (
-            extract_shortcode(data.shortcode_or_url) if data.shortcode_or_url else None
-        )
+        shortcode = extract_shortcode(data.shortcode_or_url) if data.shortcode_or_url else None
         return ProductMedia(
-            channel=data.channel,
-            external_media_id=data.external_media_id,
-            shortcode=shortcode,
-            permalink=data.permalink,
-            image_url=data.image_url,
+            channel=data.channel, external_media_id=data.external_media_id,
+            shortcode=shortcode, permalink=data.permalink, image_url=data.image_url,
         )
 
     async def add_media(self, product_id: uuid.UUID, data: MediaCreate) -> ProductMedia:
@@ -196,17 +260,11 @@ class CatalogService:
         await self.repo.db.delete(media)
         await self.repo.db.commit()
 
-    # ---------- Qidiruv (3 qatlam, TZ 8) ----------
+    # ==================== Qidiruv (3 qatlam, TZ 8) ====================
     async def search(
-        self,
-        *,
-        q: str | None = None,
-        sku: str | None = None,
-        shortcode: str | None = None,
-        limit: int = 10,
+        self, *, q: str | None = None, sku: str | None = None,
+        shortcode: str | None = None, limit: int = 10,
     ) -> tuple[str, list[tuple[Product, float | None]]]:
-        """Qaytaradi: (match_type, [(product, score)])."""
-        # 1-qatlam: aniq SKU/barcode (aniq param sifatida berilsa)
         if sku is not None:
             variant = await self.repo.get_variant_by_code(sku)
             if variant is not None:
@@ -215,7 +273,6 @@ class CatalogService:
                     return ("sku", [(product, None)])
             return ("sku", [])
 
-        # 2-qatlam: IG shortcode (aniq shortcode param yoki q ichidagi IG URL)
         sc = None
         if shortcode is not None:
             sc = extract_shortcode(shortcode)
@@ -225,7 +282,6 @@ class CatalogService:
             product = await self.repo.get_product_by_shortcode(sc)
             return ("shortcode", [(product, None)] if product else [])
 
-        # q toza matn bo'lsa: avval aniq kod, keyin tsvector
         if q:
             variant = await self.repo.get_variant_by_code(q)
             if variant is not None:
@@ -237,10 +293,7 @@ class CatalogService:
 
         return ("none", [])
 
-    async def semantic_search(
-        self, embedding: list[float], limit: int
-    ) -> list[tuple[Product, float]]:
-        """pgvector semantik qidiruv + product bo'yicha dedup (eng yaxshi skor)."""
+    async def semantic_search(self, embedding: list[float], limit: int) -> list[tuple[Product, float]]:
         raw = await self.repo.search_by_embedding(embedding, limit * 3)
         seen: dict[uuid.UUID, tuple[Product, float]] = {}
         for product, score in raw:

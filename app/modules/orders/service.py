@@ -96,7 +96,7 @@ class OrdersService:
                 )
 
             variant.reserved_qty += it.quantity  # TZ 10: reservation
-            unit_price = product.price
+            unit_price = product.effective_price  # chegirma bo'lsa o'sha
 
             # --- Ism yozish (gravyurka) narxini aniqlash ---
             engraving_text = (it.engraving_text or "").strip() or None
@@ -105,7 +105,7 @@ class OrdersService:
                 if not engraving_enabled:
                     raise AppError("Ism yozish xizmati hozircha o'chirilgan")
                 if not product.engraving_available:
-                    raise AppError(f"Bu mahsulotga ism yozib bo'lmaydi: {product.name}")
+                    raise AppError(f"Bu mahsulotga ism yozib bo'lmaydi: {product.name_uz}")
                 # Mahsulotда o'z narxi bo'lsa o'sha, aks holda Settings'dagi narx
                 engraving_price = (
                     product.engraving_price

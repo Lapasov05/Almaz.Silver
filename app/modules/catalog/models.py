@@ -1,9 +1,10 @@
-"""catalog ORM modellari — category, product, variant, product_media (TZ 6.2 / 8-bo'lim).
+"""catalog ORM modellari — reference jadvallar + category, product, variant, product_media.
 
-Muhim qarorlar (TZ 6.2 / 18-bo'lim):
-1. O'lcham variant EMAS — buyurtmada belgilanadi (`order_item.ring_size`), hamma o'lcham bir narx.
-   `variant` asosan 1:1 (har product'ga bitta default variant); qatlam komplekt/kelajak uchun.
-2. Zaxira `variant` ichida (`stock_qty`/`reserved_qty`); `available = stock_qty − reserved_qty`.
+Yangilanish (0009):
+- Ko'p tilli: `name_uz`/`name_ru`, `description_uz`/`description_ru`.
+- Reference jadvallar (DB'dan, CRUD bilan): `gender` (kim uchun), `material`, `stone`.
+- Narx: `price` (asosiy, chizilgan) + `discount_price` (chegirmali — mijoz to'laydi).
+- Og'irlik: `product.weight_grams` + `category.gram_price` (kalkulyator).
 """
 import enum
 import uuid
@@ -29,13 +30,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.base_model import Base, TimestampMixin, UUIDMixin
 
 
-# --- Enum'lar (VARCHAR + CHECK sifatida saqlanadi: native_enum=False) ---
-class Gender(str, enum.Enum):
-    erkak = "erkak"
-    ayol = "ayol"
-    uniseks = "uniseks"
-
-
 class ProductStatus(str, enum.Enum):
     draft = "draft"
     active = "active"
@@ -53,25 +47,53 @@ class MediaChannel(str, enum.Enum):
     telegram = "telegram"
 
 
-# to_tsvector uchun manba ifoda (TZ 6.3: nom + tavsif + ai_keywords).
-# 'simple' konfiguratsiya — o'zbekcha uchun xavfsiz (noto'g'ri stemming yo'q);
-# maxsus o'zbek lug'ati Faza 7'da qo'shilishi mumkin.
+# to_tsvector manbasi: uz+ru nom/tavsif + ai_keywords ('simple' konfiguratsiya)
 _SEARCH_EXPR = (
     "to_tsvector('simple', "
-    "coalesce(name, '') || ' ' || "
-    "coalesce(description, '') || ' ' || "
+    "coalesce(name_uz, '') || ' ' || coalesce(name_ru, '') || ' ' || "
+    "coalesce(description_uz, '') || ' ' || coalesce(description_ru, '') || ' ' || "
     "coalesce(ai_keywords::text, ''))"
 )
+
+
+class _ReferenceMixin:
+    """Ko'p tilli lug'at jadvallari uchun umumiy maydonlar (CRUD orqali boshqariladi)."""
+
+    name_uz: Mapped[str] = mapped_column(String(150), nullable=False)
+    name_ru: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+
+
+class Gender(_ReferenceMixin, UUIDMixin, TimestampMixin, Base):
+    """«Kim uchun» — erkak / ayol / uniseks (DB'dan, qo'lda yozilmaydi)."""
+
+    __tablename__ = "gender"
+
+
+class Material(_ReferenceMixin, UUIDMixin, TimestampMixin, Base):
+    """Material — masalan «Kumush 925 + rodiy»."""
+
+    __tablename__ = "material"
+
+
+class Stone(_ReferenceMixin, UUIDMixin, TimestampMixin, Base):
+    """Tosh turi — masalan «Serkon»."""
+
+    __tablename__ = "stone"
 
 
 class Category(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "category"
 
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    name_uz: Mapped[str] = mapped_column(String(150), nullable=False)
+    name_ru: Mapped[str | None] = mapped_column(String(150), nullable=True)
     slug: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("category.id", ondelete="SET NULL"), nullable=True
     )
+    # Og'irlik kalkulyatori: 1 gramm narxi (bo'sh bo'lsa kalkulyator ishlamaydi)
+    gram_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
     parent: Mapped["Category | None"] = relationship(remote_side="Category.id")
 
@@ -82,40 +104,43 @@ class Product(UUIDMixin, TimestampMixin, Base):
     category_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("category.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    gender: Mapped[Gender] = mapped_column(
-        Enum(Gender, native_enum=False, name="gender", length=20),
-        server_default=Gender.uniseks.value,
-        nullable=False,
+    # --- Ko'p tilli nom/tavsif ---
+    name_uz: Mapped[str] = mapped_column(String(255), nullable=False)
+    name_ru: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    description_uz: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # --- Reference (DB'dan) ---
+    gender_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("gender.id", ondelete="SET NULL"), nullable=True
     )
-    # TZ 15-bo'lim guardrail: material doim "Kumush 925 + rodiy", tosh doim "serkon"
-    material: Mapped[str] = mapped_column(
-        String(100), server_default="Kumush 925 + rodiy", nullable=False
+    material_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("material.id", ondelete="SET NULL"), nullable=True
     )
-    stone: Mapped[str] = mapped_column(String(100), server_default="serkon", nullable=False)
-    # TZ 2/15-bo'lim: qat'iy (fixed) narx + yuqori eski narx (compare_at_price)
-    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    compare_at_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    stone_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("stone.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # --- Narx: asosiy + chegirmali ---
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)  # asosiy (chizilgan)
+    discount_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)  # mijoz to'laydi
+    # --- Og'irlik (kategoriya gram_price bilan kalkulyator) ---
+    weight_grams: Mapped[Decimal | None] = mapped_column(Numeric(8, 3), nullable=True)
+
     status: Mapped[ProductStatus] = mapped_column(
         Enum(ProductStatus, native_enum=False, name="product_status", length=20),
         server_default=ProductStatus.draft.value,
         nullable=False,
         index=True,
     )
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # AI qidiruvi uchun kalit so'zlar/sinonimlar (TZ 6.2/8)
     ai_keywords: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    # --- Ism yozish (gravyurka) xizmati ---
-    # Shu mahsulotga ism yozish mumkinmi (mahsulot qo'shishда belgilanadi)
-    engraving_available: Mapped[bool] = mapped_column(
-        Boolean, server_default="false", nullable=False
-    )
-    # Ixtiyoriy narx override; NULL bo'lsa Settings'dagi `engraving_price` ishlatiladi
-    engraving_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
-    # DB tomonidan generatsiya qilinadigan to'liq matn indeksi (TZ 6.3 GIN)
     search_vector: Mapped[str | None] = mapped_column(
         TSVECTOR, Computed(_SEARCH_EXPR, persisted=True), nullable=True
     )
+    # --- Ism yozish (gravyurka) ---
+    engraving_available: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
+    engraving_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     variants: Mapped[list["Variant"]] = relationship(
@@ -125,6 +150,14 @@ class Product(UUIDMixin, TimestampMixin, Base):
         back_populates="product", cascade="all, delete-orphan"
     )
     category: Mapped["Category | None"] = relationship()
+    gender: Mapped["Gender | None"] = relationship()
+    material: Mapped["Material | None"] = relationship()
+    stone: Mapped["Stone | None"] = relationship()
+
+    @property
+    def effective_price(self) -> Decimal:
+        """Mijoz to'laydigan narx: chegirma bo'lsa — o'sha, aks holda asosiy narx."""
+        return self.discount_price if self.discount_price is not None else self.price
 
 
 class Variant(UUIDMixin, TimestampMixin, Base):
@@ -140,19 +173,15 @@ class Variant(UUIDMixin, TimestampMixin, Base):
         server_default=FulfillmentType.stocked.value,
         nullable=False,
     )
-    # TZ 6.2 muhim qaror 2: zaxira variant ichida
     stock_qty: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
     reserved_qty: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default="true", nullable=False
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="variants")
 
     @property
     def available(self) -> int:
-        """available = stock_qty − reserved_qty (TZ 6.1)."""
         return self.stock_qty - self.reserved_qty
 
 
@@ -166,11 +195,9 @@ class ProductMedia(UUIDMixin, TimestampMixin, Base):
         Enum(MediaChannel, native_enum=False, name="media_channel", length=20), nullable=False
     )
     external_media_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # TZ 7.5: IG URL → shortcode → aniq mahsulot (deterministik lookup). UNIQUE.
     shortcode: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
     permalink: Mapped[str | None] = mapped_column(String(500), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    # TZ 6.3/7.5: rasm/semantik fallback uchun embedding (hnsw). To'ldirish — Faza 3 (AI).
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="media")

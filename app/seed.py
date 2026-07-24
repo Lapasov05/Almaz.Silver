@@ -28,6 +28,7 @@ from app.modules.identity.permissions import (
     all_permission_codes,
 )
 from app.modules.ai.knowledge_defaults import DEFAULT_KNOWLEDGE
+from app.modules.catalog.models import Gender, Material, Stone
 from app.modules.ai.models import KnowledgeBase
 from app.modules.settings.defaults import DEFAULT_SETTINGS
 from app.modules.settings.models import Setting
@@ -117,11 +118,27 @@ async def seed_knowledge(db) -> None:
             db.add(KnowledgeBase(type=entry["type"], title=entry["title"], content=entry["content"]))
 
 
+async def seed_catalog_references(db) -> None:
+    """gender/material/stone lug'atlari (bo'sh bo'lsa boshlang'ich qiymatlar)."""
+    defaults = {
+        Gender: [("Erkak", "Мужской", 1), ("Ayol", "Женский", 2), ("Uniseks", "Унисекс", 3)],
+        Material: [("Kumush 925 + rodiy", "Серебро 925 + родий", 1)],
+        Stone: [("Serkon", "Серкон (фианит)", 1)],
+    }
+    for model, rows in defaults.items():
+        existing = {r.name_uz for r in (await db.execute(select(model))).scalars()}
+        for name_uz, name_ru, order in rows:
+            if name_uz not in existing:
+                db.add(model(name_uz=name_uz, name_ru=name_ru, sort_order=order))
+    await db.flush()
+
+
 async def main() -> None:
     async with SessionLocal() as db:
         perms = await seed_permissions(db)
         await seed_roles(db, perms)
         await seed_admin(db)
+        await seed_catalog_references(db)
         await seed_settings(db)
         await seed_knowledge(db)
         await db.commit()

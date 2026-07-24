@@ -188,12 +188,15 @@ def _product_brief(product: Product, engraving: tuple[bool, Decimal] | None = No
     available = sum(max(v.available, 0) for v in active_variants)
     brief = {
         "product_id": str(product.id),
-        "name": product.name,
-        "price": _num(product.price),
-        "compare_at_price": _num(product.compare_at_price),
-        "material": product.material,  # doim "Kumush 925 + rodiy"
-        "stone": product.stone,        # doim "serkon"
-        "gender": product.gender if isinstance(product.gender, str) else product.gender.value,
+        "name": product.name_uz,
+        "name_ru": product.name_ru,
+        # Mijoz to'laydigan narx (chegirma bo'lsa o'sha) + chizilgan eski narx
+        "price": _num(product.effective_price),
+        "old_price": _num(product.price) if product.discount_price is not None else None,
+        "material": product.material.name_uz if product.material else None,
+        "stone": product.stone.name_uz if product.stone else None,
+        "gender": product.gender.name_uz if product.gender else None,
+        "weight_grams": _num(product.weight_grams),
         "available": available,
         "default_variant_id": str(default_variant.id) if default_variant else None,
         "shortcodes": [m.shortcode for m in product.media if m.shortcode],
@@ -242,7 +245,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     if name == "get_product_details":
         product = await catalog.get_product(uuid.UUID(args["product_id"]))
         brief = _product_brief(product, await _engraving_settings(db))
-        brief["description"] = product.description
+        brief["description"] = product.description_uz
         brief["variants"] = [
             {"variant_id": str(v.id), "sku": v.sku, "available": max(v.available, 0)}
             for v in product.variants
