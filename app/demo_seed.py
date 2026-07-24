@@ -13,6 +13,7 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.core.security import hash_password
 from app.modules.ai.models import KnowledgeBase
@@ -38,6 +39,8 @@ from app.modules.settings.repository import SettingsRepository
 
 DEMO_FLAG = "demo_seeded"
 DEMO_PASSWORD = "demo1234"
+# Demo mahsulot rasmi — API o'zi beradi (docs/uzuk.jpg -> /static/uzuk.jpg)
+DEMO_IMAGE_URL = f"{get_settings().public_base_url.rstrip('/')}/static/uzuk.jpg"
 
 
 def _utcnow() -> datetime:
@@ -143,7 +146,7 @@ async def seed_catalog(db) -> dict[str, object]:
             engraving_price=Decimal(str(eng_price)) if eng_price else None,
             variants=[VariantCreate(stock_qty=stock)],
             media=[MediaCreate(shortcode_or_url=shortcode,
-                               image_url=f"https://cdn.almazsilver.uz/{shortcode}.jpg")],
+                               image_url=DEMO_IMAGE_URL)],
         ))
         products[name] = p
     print(f"  ✓ {len(DEMO_CATEGORIES)} kategoriya, {len(DEMO_PRODUCTS)} mahsulot (variant+media+zaxira)")
@@ -271,7 +274,12 @@ async def seed_extra_kb(db) -> None:
 async def main() -> None:
     async with SessionLocal() as db:
         if await _flag_set(db):
-            print("ℹ️  Demo ma'lumot allaqachon qo'shilgan (demo_seeded=true). Toza boshlash: docker compose down -v")
+            # Rasm URL'i o'zgargan bo'lsa — mavjud demo mediani yangilaymiz (to'liq qayta seed shart emas)
+            from sqlalchemy import update as _update
+            from app.modules.catalog.models import ProductMedia
+            await db.execute(_update(ProductMedia).values(image_url=DEMO_IMAGE_URL))
+            await db.commit()
+            print(f"ℹ️  Demo allaqachon bor. Mahsulot rasmlari yangilandi -> {DEMO_IMAGE_URL}")
             return
         print("🎬 DEMO seed boshlandi...")
         users = await seed_users(db)

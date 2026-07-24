@@ -2,6 +2,7 @@
 
 Barcha modul routerlari + hardening (structured logging, request middleware, readiness).
 """
+import os
 import secrets
 import time
 import uuid
@@ -12,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.core.config import get_settings
@@ -96,6 +98,10 @@ def create_app() -> FastAPI:
     @app.get("/redoc", include_in_schema=False, dependencies=_docs_deps)
     async def redoc_ui():
         return get_redoc_html(openapi_url="/openapi.json", title=f"{settings.app_name} — API")
+
+    # --- Statik fayllar (demo mahsulot rasmlari va h.k.): docs/ -> /static ---
+    if os.path.isdir("docs"):
+        app.mount("/static", StaticFiles(directory="docs"), name="static")
 
     # TZ 16: har so'rov uchun request_id + strukturaviy log (metod/yo'l/status/vaqt)
     @app.middleware("http")
