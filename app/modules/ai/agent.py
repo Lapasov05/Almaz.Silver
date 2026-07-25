@@ -56,12 +56,14 @@ class Agent:
 
         # --- Gating (TZ 5/14) ---
         if not bool(await _setting(self.db, "ai_enabled", True)):
-            return AgentOutcome(status="skipped", reason="ai_disabled")
+            return AgentOutcome(status="skipped", reason="ai_disabled")     # global o'chirilgan
+        if not conv.ai_enabled:
+            return AgentOutcome(status="skipped", reason="ai_disabled_conversation")  # shu suhbatда o'chirilgan
         if conv.status == "closed":
             return AgentOutcome(status="skipped", reason="closed")
         now = datetime.now(timezone.utc)
         if conv.ai_paused_until is not None and conv.ai_paused_until > now:
-            return AgentOutcome(status="skipped", reason="operator_handoff")
+            return AgentOutcome(status="skipped", reason="operator_handoff")  # vaqtincha pauza
         if self.provider is None:
             logger.info("LLM provayder yo'q — AI jim (conv=%s)", conv.id)
             return AgentOutcome(status="skipped", reason="no_provider")

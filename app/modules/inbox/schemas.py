@@ -34,6 +34,7 @@ class ConversationOut(BaseModel):
     ai_state: AiState
     status: ConversationStatus
     assigned_operator_id: uuid.UUID | None
+    ai_enabled: bool
     ai_paused_until: datetime | None
     unread_count: int
     last_message: str | None
@@ -67,3 +68,12 @@ class TransferRequest(BaseModel):
 
 class AssignRequest(BaseModel):
     operator_id: uuid.UUID
+
+
+class AiControlRequest(BaseModel):
+    """Shu suhbatда AI'ni boshqarish (operator qo'lda)."""
+
+    # pause_minutes: N daqiqaga · pause_until: aniq sana-vaqtgacha · off: butunlay o'chir · on: yoq
+    mode: str = Field(pattern="^(pause_minutes|pause_until|off|on)$")
+    minutes: int | None = Field(default=None, ge=1)      # pause_minutes uchun
+    until: datetime | None = None                         # pause_until uchun (kelajakda)

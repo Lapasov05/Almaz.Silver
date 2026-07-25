@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import AppError, NotFoundError
 from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming
 from app.modules.inbox.channels.factory import get_channel_client
 from app.modules.inbox.models import (
@@ -189,5 +189,33 @@ class InboxService:
     async def assign(self, conversation_id: uuid.UUID, operator_id: uuid.UUID) -> Conversation:
         conv = await self.get_conversation(conversation_id)
         conv.assigned_operator_id = operator_id
+        await self.repo.db.commit()
+        return conv
+
+    # ---------- Shu suhbatда AI'ni qo'lda boshqarish ----------
+    async def set_ai_control(
+        self, conversation_id: uuid.UUID, *, mode: str, minutes: int | None, until: datetime | None
+    ) -> Conversation:
+        conv = await self.get_conversation(conversation_id)
+        now = _utcnow()
+        if mode == "off":              # butunlay o'chir (mijoz keyin yozsa ham AI jim)
+            conv.ai_enabled = False
+        elif mode == "on":             # yoq (pauzani ham tozala)
+            conv.ai_enabled = True
+            conv.ai_paused_until = None
+        elif mode == "pause_minutes":  # N daqiqaga
+            if not minutes:
+                raise AppError("`minutes` ko'rsatilishi kerak")
+            conv.ai_enabled = True
+            conv.ai_paused_until = now + timedelta(minutes=minutes)
+        elif mode == "pause_until":    # aniq sana-vaqtgacha
+            if until is None:
+                raise AppError("`until` ko'rsatilishi kerak")
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            if until <= now:
+                raise AppError("`until` kelajakдаgi vaqt bo'lishi kerak")
+            conv.ai_enabled = True
+            conv.ai_paused_until = until
         await self.repo.db.commit()
         return conv

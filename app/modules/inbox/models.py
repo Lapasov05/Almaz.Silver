@@ -111,7 +111,9 @@ class Conversation(UUIDMixin, TimestampMixin, Base):
     assigned_operator_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
-    # TZ 9: operator yozgach AI pauzasi (now + ai_pause_minutes)
+    # Shu suhbatда AI umuman javob bersinmi (operator butunlay o'chirib qo'yishi mumkin)
+    ai_enabled: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    # TZ 9: operator yozgach AI pauzasi (now + ai_pause_minutes); yoki aniq sana-vaqtgacha
     ai_paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     unread_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
     last_message: Mapped[str | None] = mapped_column(Text, nullable=True)

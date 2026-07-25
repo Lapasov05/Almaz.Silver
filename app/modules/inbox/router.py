@@ -15,6 +15,7 @@ from app.modules.identity.models import User
 from app.modules.inbox.models import AiState
 from app.modules.inbox.repository import InboxRepository
 from app.modules.inbox.schemas import (
+    AiControlRequest,
     AssignRequest,
     Channel,
     ConversationOut,
@@ -139,3 +140,20 @@ async def assign(
     return ConversationOut.model_validate(
         await service.assign(conversation_id, payload.operator_id)
     )
+
+
+@router.post(
+    "/conversations/{conversation_id}/ai",
+    response_model=ConversationOut,
+    dependencies=[Depends(require_permission("conversations:update"))],
+)
+async def ai_control(
+    conversation_id: uuid.UUID,
+    payload: AiControlRequest,
+    service: InboxService = Depends(get_inbox_service),
+) -> ConversationOut:
+    """Shu suhbatда AI'ni boshqarish: pause_minutes / pause_until / off / on."""
+    conv = await service.set_ai_control(
+        conversation_id, mode=payload.mode, minutes=payload.minutes, until=payload.until
+    )
+    return ConversationOut.model_validate(conv)
