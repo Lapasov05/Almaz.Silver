@@ -66,8 +66,8 @@ DEMO_USERS = [
     ("Guest", "guest@almazsilver.uz", "Mehmon Foydalanuvchi"),
 ]
 
-# ── Kategoriyalar ──
-DEMO_CATEGORIES = ["Uzuklar", "Brasletlar", "Sepochkalar", "Komplektlar"]
+# ── Kategoriyalar (faqat Uzuklar o'lchamli; qolganlari universal) ──
+DEMO_CATEGORIES = ["Uzuklar", "Brasletlar", "Sepochkalar", "Ziraklar", "Komplektlar"]
 
 # ── ~12 mahsulot (97% uzuk), Kumush 925 + rodiy, serkon; eski/yangi narx ──
 # (kategoriya, nom, gender, yangi_narx, eski_narx, stock, engraving_available, engraving_price, shortcode, keywords)
@@ -83,7 +83,8 @@ DEMO_PRODUCTS = [
     ("Brasletlar", "Kumush braslet 'Oydin'", "ayol", 830000, 1650000, 5, False, None, "OYDIN09", ["braslet", "ayollar"]),
     ("Sepochkalar", "Kumush sepochka 'Ipak'", "ayol", 540000, 1080000, 11, False, None, "IPAK10", ["sepochka", "zanjir", "ayollar"]),
     ("Sepochkalar", "Erkaklar sepochka 'Qudrat'", "erkak", 690000, 1380000, 8, False, None, "QUDRAT11", ["sepochka", "erkak", "zanjir"]),
-    ("Komplektlar", "Komplekt 'Malika Set' (uzuk+sepochka)", "ayol", 1450000, 2900000, 4, False, None, "MALIKASET12", ["komplekt", "set", "sovga"]),
+    ("Ziraklar", "Kumush zirak 'Shabnam'", "ayol", 470000, 940000, 9, False, None, "SHABNAM12", ["zirak", "sirga", "ayollar"]),
+    ("Komplektlar", "Komplekt 'Malika Set' (uzuk+zirak+sepochka)", "ayol", 1650000, 3300000, 4, False, None, "MALIKASET13", ["komplekt", "set", "sovga"]),
 ]
 
 # ── Mijozlar (IG + TG) ──
@@ -140,7 +141,8 @@ async def seed_catalog(db) -> dict[str, object]:
     gmap = {"erkak": genders.get("Erkak"), "ayol": genders.get("Ayol"), "uniseks": genders.get("Uniseks")}
     cats = {}
     for name in DEMO_CATEGORIES:
-        cats[name] = await catalog.create_category(CategoryCreate(name_uz=name, name_ru=name))
+        cats[name] = await catalog.create_category(CategoryCreate(
+            name_uz=name, name_ru=name, requires_ring_size=(name == "Uzuklar")))
     products = {}
     for (cat, name, gender, price, old, stock, eng_av, eng_price, shortcode, kw) in DEMO_PRODUCTS:
         p = await catalog.create_product(ProductCreate(
@@ -261,7 +263,7 @@ async def seed_orders(db, convs, products, reviewer: User) -> None:
     await orders.cancel_order(o6.id, changed_by=reviewer.id)
     # 7) confirmed komplekt (region)
     o7 = await orders.create_order(await cust(2), [OrderItemCreate(
-        variant_id=vid("Komplekt 'Malika Set' (uzuk+sepochka)"), quantity=1, ring_size="17")])
+        variant_id=vid("Komplekt 'Malika Set' (uzuk+zirak+sepochka)"), quantity=1, ring_size="17")])
     await checkout(o7.id, "region")
     p7 = await payments.submit_payment(o7.id, "https://cdn.almazsilver.uz/receipts/demo7.jpg", "Malika Yusupova")
     await payments.approve(p7.id, reviewer.id)

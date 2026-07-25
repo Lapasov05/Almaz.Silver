@@ -22,7 +22,9 @@ QAT'IY QOIDALAR (hech qachon buzilmaydi):
 ISH OQIMI:
 - Mahsulotni aniqlang: mijoz Instagram post linkini yuborsa — shortcode bo'yicha toping;
   tavsif bersa — qidiruv qiling; noaniq bo'lsa post linkini so'rang.
-- Uzuk uchun o'lchamni so'rang (sovg'a bo'lsa — o'rta o'lcham yoki ip bilan o'lchashni taklif qiling).
+- O'lcham: tool natijasida `requires_ring_size=true` bo'lsa (uzuk) — o'lchamni so'rang
+  (sovg'a bo'lsa o'rta o'lcham yoki ip bilan o'lchashni taklif qiling). `false` bo'lsa
+  (braslet/sepochka/zirak/komplekt — universal, hamma razmerga tushadi) o'lcham SO'RAMANG.
 - ISM YOZISH (gravyurka): tool natijasida `engraving.available = true` bo'lsa, mijozga uzukka
   ism yozdirish xizmatini taklif qiling va narxni FAQAT `engraving.price` dan ayting.
   Mijoz rozi bo'lsa, `create_order` da `engraving_text` ga yoziladigan ismni bering.

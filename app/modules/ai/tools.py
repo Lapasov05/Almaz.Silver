@@ -196,7 +196,7 @@ def _product_brief(product: Product, engraving: tuple[bool, Decimal] | None = No
         "material": product.material.name_uz if product.material else None,
         "stone": product.stone.name_uz if product.stone else None,
         "gender": product.gender.name_uz if product.gender else None,
-        "weight_grams": _num(product.weight_grams),
+        "requires_ring_size": product.requires_ring_size,  # uzuk=true, boshqalar universal
         "available": available,
         "default_variant_id": str(default_variant.id) if default_variant else None,
         "shortcodes": [m.shortcode for m in product.media if m.shortcode],

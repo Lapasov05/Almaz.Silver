@@ -42,6 +42,7 @@ class CategoryCreate(BaseModel):
     name_ru: str | None = Field(default=None, max_length=150)
     slug: str | None = Field(default=None, max_length=150)  # bo'sh -> name_uz'dan
     parent_id: uuid.UUID | None = None
+    requires_ring_size: bool = False  # faqat Uzuklar uchun true
 
 
 class CategoryUpdate(BaseModel):
@@ -49,6 +50,7 @@ class CategoryUpdate(BaseModel):
     name_ru: str | None = Field(default=None, max_length=150)
     slug: str | None = Field(default=None, max_length=150)
     parent_id: uuid.UUID | None = None
+    requires_ring_size: bool | None = None
 
 
 class CategoryOut(BaseModel):
@@ -59,6 +61,7 @@ class CategoryOut(BaseModel):
     name_ru: str | None
     slug: str
     parent_id: uuid.UUID | None
+    requires_ring_size: bool
 
 
 # ---------- Variant ----------
@@ -176,6 +179,7 @@ class ProductOut(BaseModel):
     engraving_price: Decimal | None
     low_stock_threshold: int | None
     available: int                  # umumiy mavjud zaxira
+    requires_ring_size: bool        # buyurtmada o'lcham kerakmi (kategoriyadan)
     gender: ReferenceOut | None
     material: ReferenceOut | None
     stone: ReferenceOut | None

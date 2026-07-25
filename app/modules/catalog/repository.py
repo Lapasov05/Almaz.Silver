@@ -23,6 +23,7 @@ _PRODUCT_LOADERS = (
     selectinload(Product.gender),
     selectinload(Product.material),
     selectinload(Product.stone),
+    selectinload(Product.category),  # requires_ring_size uchun
 )
 
 REFERENCE_MODELS = {"gender": Gender, "material": Material, "stone": Stone}

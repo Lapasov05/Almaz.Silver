@@ -92,6 +92,9 @@ class Category(UUIDMixin, TimestampMixin, Base):
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("category.id", ondelete="SET NULL"), nullable=True
     )
+    # Bu kategoriya mahsulotlarida o'lcham (uzuk razmeri) bo'ladimi. Faqat «Uzuklar» = true;
+    # braslet/sepochka/zirak/komplekt — universal (o'lchamsiz).
+    requires_ring_size: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
 
     parent: Mapped["Category | None"] = relationship(remote_side="Category.id")
 
@@ -165,6 +168,11 @@ class Product(UUIDMixin, TimestampMixin, Base):
             for v in self.variants
             if v.is_active and v.deleted_at is None
         )
+
+    @property
+    def requires_ring_size(self) -> bool:
+        """Bu mahsulotга buyurtmada o'lcham kerakmi (kategoriyadan). Universal bo'lsa False."""
+        return bool(self.category and self.category.requires_ring_size)
 
 
 class Variant(UUIDMixin, TimestampMixin, Base):
