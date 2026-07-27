@@ -164,6 +164,14 @@ class InboxService:
         """AI javobini yuboradi. Operatordan farqli — ai_paused_until o'zgarmaydi."""
         return await self._send_outbound(conv, text, sender_type="ai")
 
+    async def send_typing(self, conv: Conversation) -> None:
+        """Suhbat kanalига "yozyapti..." indikatorini yuboradi (best-effort)."""
+        try:
+            client = await build_channel_client(self.repo.db, conv.channel)
+            await client.send_typing(conv.customer.external_id)
+        except Exception:  # noqa: BLE001 — indikator muhim emas
+            logger.debug("typing indikatori yuborilmadi (conv=%s)", conv.id, exc_info=True)
+
     # ---------- Tizim xabari (to'lov tasdiq/rad va h.k.) ----------
     async def notify_customer(self, customer_id: uuid.UUID, channel: str, text: str) -> Message | None:
         """Mijozning ochiq suhbatiga tizim xabarini yuboradi (suhbat bo'lmasa None)."""

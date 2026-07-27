@@ -80,3 +80,15 @@ class InstagramClient:
         if resp.status_code >= 400:
             raise ChannelError(f"Instagram send xato: {resp.status_code} {resp.text[:200]}")
         return SendResult(external_message_id=resp.json().get("message_id"))
+
+    async def send_typing(self, recipient_id: str) -> None:
+        """sender_action=typing_on — "yozyapti..." (best-effort)."""
+        if not self._token:
+            return
+        url = f"{self._base}/{self._version}/{self._sender}/messages"
+        body = {"recipient": {"id": recipient_id}, "sender_action": "typing_on"}
+        try:
+            async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+                await client.post(url, params={"access_token": self._token}, json=body)
+        except Exception:  # noqa: BLE001 — indikator muhim emas, xato yutiladi
+            pass

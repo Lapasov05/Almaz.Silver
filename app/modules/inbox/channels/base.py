@@ -48,3 +48,7 @@ class ChannelClient(Protocol):
     """Outbound xabar yuborish interfeysi (Telegram/Instagram amalga oshiradi)."""
 
     async def send_text(self, recipient_id: str, text: str) -> SendResult: ...
+
+    async def send_typing(self, recipient_id: str) -> None:
+        """"Yozyapti..." indikatorini yuboradi (best-effort — xato bo'lsa jim)."""
+        ...

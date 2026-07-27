@@ -77,6 +77,17 @@ class TelegramClient:
         result = resp.json().get("result", {})
         return SendResult(external_message_id=str(result.get("message_id")) if result.get("message_id") else None)
 
+    async def send_typing(self, recipient_id: str) -> None:
+        """sendChatAction(typing) — "yozyapti..." (best-effort, ~5s ko'rinadi)."""
+        if not self._token:
+            return
+        url = f"{self._base}/bot{self._token}/sendChatAction"
+        try:
+            async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+                await client.post(url, json={"chat_id": recipient_id, "action": "typing"})
+        except Exception:  # noqa: BLE001 — indikator muhim emas, xato yutiladi
+            pass
+
     async def answer_callback(self, callback_query_id: str, text: str | None = None) -> None:
         if not self._token:
             return

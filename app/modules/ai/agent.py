@@ -3,8 +3,10 @@
 Runtime ketma-ketligi (TZ 5): worker kelgan xabar uchun shu agentni ishga tushiradi.
 Gating: `ai_enabled`, `ai_paused_until` (operator handoff), yopilgan suhbat.
 """
+import asyncio
 import json
 import logging
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -86,6 +88,11 @@ class Agent:
             logger.info("LLM provayder yo'q — AI jim (conv=%s)", conv.id)
             return AgentOutcome(status="skipped", reason="no_provider")
 
+        # Javob tayyorlanmoqda — "yozyapti..." indikatorini yuboramiz + pauza uchun vaqt boshi
+        inbox_svc = InboxService(inbox_repo)
+        await inbox_svc.send_typing(conv)
+        reply_started = time.monotonic()
+
         # --- Prompt + memory (TZ 7.2/7.3) ---
         prompt_version = int(await _setting(self.db, "prompt_version", 1) or 1)
         override = await _setting(self.db, "system_prompt_override", None)
@@ -151,8 +158,13 @@ class Agent:
         if guard.violations:
             logger.warning("Guardrail buzilishi tuzatildi: %s (conv=%s)", guard.violations, conv.id)
 
+        # --- Insonsimon pauza: typing ko'rinib tursin, javob ~N soniyaда chiqsin ---
+        remaining = settings.ai_reply_delay_seconds - (time.monotonic() - reply_started)
+        if remaining > 0:
+            await inbox_svc.send_typing(conv)   # LLM tez tugagan bo'lsa indikatorni yangilaymiz
+            await asyncio.sleep(remaining)
+
         # --- Javobni yuborish (AI, pauza qo'ymaydi) ---
-        inbox_svc = InboxService(inbox_repo)
         message = await inbox_svc.ai_send(conv, guard.text)
 
         # --- State machine (TZ 7.1) ---
