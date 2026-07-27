@@ -7,6 +7,11 @@ from celery import Celery
 
 from app.core.config import get_settings
 
+# Worker metadata TO'LIQ bo'lishi uchun barcha modellarni ro'yxatga olamiz.
+# (Aks holда FK'lar — masalan conversation.assigned_operator_id -> user — flush'да
+#  NoReferencedTableError beradi, chunki worker `user` jadvalини ko'rmaydi.)
+import app.core.models_registry  # noqa: F401
+
 settings = get_settings()
 
 celery_app = Celery(
