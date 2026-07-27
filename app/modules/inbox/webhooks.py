@@ -32,7 +32,9 @@ def get_inbox_service(db: AsyncSession = Depends(get_db)) -> InboxService:
 
 
 # ==================== Telegram ====================
+# Oxirida slash bilan ham qabul qilamiz (Meta/foydalanuvchi slash qo'ysa 307 redirect bo'lmasin)
 @router.post("/telegram", dependencies=[_webhook_rl])
+@router.post("/telegram/", dependencies=[_webhook_rl], include_in_schema=False)
 async def telegram_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -66,7 +68,9 @@ async def telegram_webhook(
 
 
 # ==================== Instagram ====================
+# Slashli variant ham (Meta konsолida oxirida `/` qo'yilса 307 redirect -> event yo'qolmasin)
 @router.get("/instagram")
+@router.get("/instagram/", include_in_schema=False)
 async def instagram_verify(request: Request, db: AsyncSession = Depends(get_db)) -> PlainTextResponse:
     """Meta webhook verification (GET hub.challenge)."""
     p = request.query_params
@@ -80,6 +84,7 @@ async def instagram_verify(request: Request, db: AsyncSession = Depends(get_db))
 
 
 @router.post("/instagram", dependencies=[_webhook_rl])
+@router.post("/instagram/", dependencies=[_webhook_rl], include_in_schema=False)
 async def instagram_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
