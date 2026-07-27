@@ -86,12 +86,17 @@ async def instagram_webhook(
     service: InboxService = Depends(get_inbox_service),
 ) -> dict:
     raw = await request.body()
+    payload = json.loads(raw or b"{}")
     app_secret = await get_config_value(db, "instagram", "app_secret")
-    if not ig.verify_signature(raw, request.headers.get("X-Hub-Signature-256"), app_secret=app_secret):
+    sig_ok = ig.verify_signature(raw, request.headers.get("X-Hub-Signature-256"), app_secret=app_secret)
+
+    # Audit HAR DOIM saqlanadi — imzo rad etilса ham ko'rinsin (aks holда "kelmagandek" tuyuladi).
+    # app_secret Meta'niki bilan mos kelmasa -> `rejected_signature` qatorlari ig-events'да chiqadi.
+    await log_event(db, "instagram", payload, status="received" if sig_ok else "rejected_signature")
+    if not sig_ok:
+        await db.commit()  # audit saqlansin, keyin rad etamiz
         raise AuthError("Instagram imzo (signature) noto'g'ri")
 
-    payload = json.loads(raw or b"{}")
-    await log_event(db, "instagram", payload)  # xom payload audit
     events = ig.parse_payload(payload)
     for normalized in events:
         message = await service.ingest_incoming(normalized)
