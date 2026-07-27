@@ -114,6 +114,10 @@ test-send: ## Jonli outbound: send API javob yuboradimi (make test-send TG=<chat
 test-ai: ## AI nega javob bermayapti — diagnostika (make test-ai CH=instagram|telegram)
 	$(DC) exec -T -e CH=$(CH) api python -m app.ai_replytest
 
+.PHONY: test-typing
+test-typing: ## Jonli typing_on test — IG/TG "yozyapti..." API javobi (make test-typing IG=<igsid> TG=<chatid>)
+	$(DC) exec -T -e IG_TO=$(IG) -e TG_TO=$(TG) api python -m app.typing_test
+
 # ==================== Instagram webhook debug ====================
 .PHONY: ig-verify ig-subscribe ig-check
 ig-verify: ## GET verify handshake'ni LOKAL sinash (verify_token DB'dan) — challenge qaytishi kerak

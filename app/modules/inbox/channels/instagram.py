@@ -1,6 +1,7 @@
 """Instagram (Meta Graph API) adapteri — parse, X-Hub imzo, verify challenge, yuborish (TZ 3/15)."""
 import hashlib
 import hmac
+import logging
 
 import httpx
 
@@ -8,6 +9,7 @@ from app.core.config import get_settings
 from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, SendResult
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 def verify_signature(raw_body: bytes, header_value: str | None, app_secret: str | None = None) -> bool:
@@ -89,6 +91,8 @@ class InstagramClient:
         body = {"recipient": {"id": recipient_id}, "sender_action": "typing_on"}
         try:
             async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-                await client.post(url, params={"access_token": self._token}, json=body)
-        except Exception:  # noqa: BLE001 — indikator muhim emas, xato yutiladi
-            pass
+                resp = await client.post(url, params={"access_token": self._token}, json=body)
+            if resp.status_code >= 400:  # httpx 4xx'da istisno tashlamaydi — o'zimiz log qilamiz
+                logger.warning("Instagram typing_on xato: %s %s", resp.status_code, resp.text[:250])
+        except Exception as e:  # noqa: BLE001 — indikator muhim emas, javobga ta'sir qilmasin
+            logger.warning("Instagram typing_on yuborilmadi: %s", e)

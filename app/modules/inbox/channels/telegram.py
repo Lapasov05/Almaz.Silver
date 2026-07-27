@@ -1,5 +1,6 @@
 """Telegram Bot API adapteri — parse, webhook secret tekshiruvi, xabar yuborish (TZ 3/15)."""
 import hmac
+import logging
 
 import httpx
 
@@ -7,6 +8,7 @@ from app.core.config import get_settings
 from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, SendResult
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 
 def verify_secret(header_value: str | None, expected: str | None = None) -> bool:
@@ -84,9 +86,11 @@ class TelegramClient:
         url = f"{self._base}/bot{self._token}/sendChatAction"
         try:
             async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-                await client.post(url, json={"chat_id": recipient_id, "action": "typing"})
-        except Exception:  # noqa: BLE001 — indikator muhim emas, xato yutiladi
-            pass
+                resp = await client.post(url, json={"chat_id": recipient_id, "action": "typing"})
+            if resp.status_code != 200 or not resp.json().get("ok"):
+                logger.warning("Telegram sendChatAction xato: %s %s", resp.status_code, resp.text[:200])
+        except Exception as e:  # noqa: BLE001 — indikator muhim emas
+            logger.warning("Telegram sendChatAction yuborilmadi: %s", e)
 
     async def answer_callback(self, callback_query_id: str, text: str | None = None) -> None:
         if not self._token:
