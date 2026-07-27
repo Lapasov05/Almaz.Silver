@@ -13,27 +13,12 @@ from app.modules.integrations.repository import IntegrationRepository
 
 settings = get_settings()
 
-# (provider, key) -> .env fallback qiymati
-_ENV_FALLBACK = {
-    ("telegram", "bot_token"): lambda s: s.telegram_bot_token,
-    ("telegram", "webhook_secret"): lambda s: s.telegram_webhook_secret,
-    ("instagram", "access_token"): lambda s: s.instagram_page_access_token,
-    ("instagram", "verify_token"): lambda s: s.instagram_verify_token,
-    ("instagram", "app_secret"): lambda s: s.instagram_app_secret,
-    ("openai", "api_key"): lambda s: s.openai_api_key,
-}
-
 
 async def get_config_value(db: AsyncSession, provider: str, key: str, default: str = "") -> str:
-    """DB (aktiv) → .env → default."""
+    """Faqat DB'dan (IntegrationConfig, aktiv). Env'дан OLINMAYDI — token yagona manba: DB."""
     row = await IntegrationRepository(db).get(provider, key)
     if row is not None and row.value:
         return row.value
-    fb = _ENV_FALLBACK.get((provider, key))
-    if fb is not None:
-        val = fb(settings)
-        if val:
-            return val
     return default
 
 

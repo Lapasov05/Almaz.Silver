@@ -44,16 +44,11 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://redis:6379/1"
     celery_task_always_eager: bool = False  # test/dev: broker'siz inline ishlash
 
-    # --- Telegram (TZ 3/15-bo'lim) ---
-    telegram_bot_token: str = ""
-    telegram_webhook_secret: str = ""  # setWebhook secret_token bilan tekshiruv
+    # --- Telegram (bazaviy URL + knoblar; TOKENLAR integration_config'да, env'да EMAS) ---
     telegram_api_base_url: str = "https://api.telegram.org"
     telegram_auto_webhook: bool = True  # ishga tushganда webhook'ni avtomatik ulash
 
-    # --- Instagram / Meta Graph API (TZ 3/15-bo'lim) ---
-    instagram_app_secret: str = ""        # X-Hub-Signature-256 HMAC uchun
-    instagram_verify_token: str = ""      # GET webhook verification (hub.verify_token)
-    instagram_page_access_token: str = ""  # xabar yuborish uchun
+    # --- Instagram / Meta Graph API (bazaviy URL; TOKENLAR DB'да) ---
     instagram_graph_version: str = "v21.0"
     instagram_graph_base_url: str = "https://graph.facebook.com"
 
@@ -99,11 +94,9 @@ class Settings(BaseSettings):
     reengagement_inactivity_minutes: int = 120   # shu vaqtdan jim bo'lsa
     reengagement_window_hours: int = 24          # IG 24h oynasi ichida bo'lsa
 
-    # --- AI / LLM (TZ 7-bo'lim) ---
-    # provider: "openai" (real, kalit kerak) | "fake" (dev/test) | "none" (jim)
+    # --- AI / LLM (TZ 7-bo'lim). OpenAI api_key -> integration_config (DB), env'да EMAS ---
+    # llm_provider: "openai" (real, DB'да kalit) | "fake" (dev/test, kalitsiz) | "none"
     llm_provider: str = "openai"
-    openai_api_key: str = ""
-    openai_base_url: str = ""  # bo'sh -> standart OpenAI; Azure/proxy uchun override
     ai_default_model: str = "gpt-4o"        # settings.llm_model ustun keladi
     ai_default_temperature: float = 0.7     # settings.ai_temperature ustun keladi
     ai_memory_message_count: int = 15       # xotira uchun oxirgi N xabar (TZ 7.3)

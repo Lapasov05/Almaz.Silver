@@ -16,7 +16,7 @@ def verify_secret(header_value: str | None, expected: str | None = None) -> bool
     `expected` berilmasa .env'dan olinadi (DB-token uchun chaqiruvchi uzatadi).
     """
     if expected is None:
-        expected = settings.telegram_webhook_secret
+        expected = ""  # DB'да yo'q bo'lsa — tekshiruv o'tkazib yuboriladi (chaqiruvchi DB'дан beradi)
     if not expected:  # sozlanmagan bo'lsa dev'da tekshiruvni o'tkazib yuboramiz
         return True
     if not header_value:
@@ -58,7 +58,7 @@ class TelegramClient:
     """Telegram sendMessage klienti."""
 
     def __init__(self, bot_token: str | None = None) -> None:
-        self._token = bot_token if bot_token is not None else settings.telegram_bot_token
+        self._token = bot_token or ""  # token DB'дан beriladi (chaqiruvchi build_channel_client orqali)
         self._base = settings.telegram_api_base_url.rstrip("/")
 
     async def send_text(

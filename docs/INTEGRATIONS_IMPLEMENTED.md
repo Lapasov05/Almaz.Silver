@@ -15,9 +15,14 @@ POST   /integrations/configs   {provider, key, value, is_active}   # (provider,k
 PATCH  /integrations/configs/{id}
 DELETE /integrations/configs/{id}
 ```
-**Token o'qish tartibi:** IntegrationConfig (DB, aktiv) → `.env` (settings) → default. Ya'ni
-`.env` fallback saqlanadi — hech narsa buzilmaydi. Kalitlar: `telegram/bot_token`,
-`telegram/webhook_secret`, `instagram/access_token`, `instagram/verify_token`, `instagram/app_secret`, `openai/api_key`.
+**Token o'qish:** FAQAT IntegrationConfig (DB, aktiv). **`.env`дан OLINMAYDI** — token yagona manba DB
+(shunda API orqali o'zgartirsangiz darhol qo'llanadi, env eski qiymatni bermaydi). Kalitlar:
+`telegram/bot_token`, `telegram/webhook_secret`, `instagram/access_token`, `instagram/verify_token`,
+`instagram/app_secret`, `openai/api_key`, `openai/base_url`.
+
+> **Yangilanish:** avval `.env` fallback bor edi — olib tashlandi. `.env`da endi faqat sir bo'lmagan
+> bazaviy URL/knoblar (`TELEGRAM_API_BASE_URL`, `INSTAGRAM_GRAPH_*`, `LLM_PROVIDER`, `TELEGRAM_AUTO_WEBHOOK`).
+> **OpenAI kaliti ham DB'да** (`openai/api_key`) — AI faqat DB'да kalit bo'lsa ishlaydi.
 
 Webhook verify (secret / app_secret / verify_token) va outbound send (bot_token / access_token) endi
 shu tartibда tokenni oladi.

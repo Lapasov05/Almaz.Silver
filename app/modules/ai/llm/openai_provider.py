@@ -35,10 +35,10 @@ def _to_openai_messages(messages: list[LlmMessage]) -> list[dict]:
 
 
 class OpenAIProvider:
-    def __init__(self) -> None:
-        kwargs: dict = {"api_key": settings.openai_api_key}
-        if settings.openai_base_url:
-            kwargs["base_url"] = settings.openai_base_url
+    def __init__(self, api_key: str, base_url: str = "") -> None:
+        kwargs: dict = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
         self._client = AsyncOpenAI(**kwargs)
 
     async def complete(

@@ -14,20 +14,18 @@ import sys
 
 from sqlalchemy import select
 
-from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.modules.integrations.models import IntegrationConfig
 
-settings = get_settings()
-
-# (provider, key, .env fallback, placeholder/izoh)
+# (provider, key, placeholder) — tokenlar FAQAT DB'да; bu placeholder'larni API orqali almashtiring
 DEMO_INTEGRATIONS = [
-    ("telegram", "bot_token", settings.telegram_bot_token, "123456:ABC-DEF-bot-token-bu-yerga"),
-    ("telegram", "webhook_secret", settings.telegram_webhook_secret, "webhook-maxfiy-kalit"),
-    ("instagram", "access_token", settings.instagram_page_access_token, "IGAAxxxxxxxx-access-token"),
-    ("instagram", "verify_token", settings.instagram_verify_token, "verify-token-meta-konsolда-bir-xil"),
-    ("instagram", "app_secret", settings.instagram_app_secret, "meta-app-secret-hmac-uchun"),
-    ("openai", "api_key", settings.openai_api_key, "sk-...-openai-api-key"),
+    ("telegram", "bot_token", "123456:ABC-DEF-bot-token-bu-yerga"),
+    ("telegram", "webhook_secret", "webhook-maxfiy-kalit"),
+    ("instagram", "access_token", "IGAAxxxxxxxx-access-token"),
+    ("instagram", "verify_token", "verify-token-meta-konsolда-bir-xil"),
+    ("instagram", "app_secret", "meta-app-secret-hmac-uchun"),
+    ("openai", "api_key", "sk-...-openai-api-key"),
+    ("openai", "base_url", ""),  # ixtiyoriy (Azure/proxy uchun)
 ]
 
 
@@ -36,8 +34,8 @@ async def main() -> None:
     created, updated, skipped = 0, 0, 0
 
     async with SessionLocal() as db:
-        for provider, key, env_value, placeholder in DEMO_INTEGRATIONS:
-            value = env_value or placeholder            # .env bo'lsa o'sha, aks holda placeholder
+        for provider, key, placeholder in DEMO_INTEGRATIONS:
+            value = placeholder
             row = (
                 await db.execute(
                     select(IntegrationConfig).where(

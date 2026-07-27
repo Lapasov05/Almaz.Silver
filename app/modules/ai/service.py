@@ -55,10 +55,16 @@ class AgentService:
 
     def __init__(self, db: AsyncSession, provider: LLMProvider | None | object = _UNSET):
         self.db = db
-        self._provider = get_llm_provider() if provider is _UNSET else provider
+        self._provider_arg = provider  # _UNSET -> DB'дан olinadi (get_llm_provider)
+
+    async def _resolve_provider(self) -> LLMProvider | None:
+        if self._provider_arg is not _UNSET:
+            return self._provider_arg  # test/qo'lda berilgan (FakeProvider yoki None)
+        return await get_llm_provider(self.db)
 
     async def respond(self, conversation_id: uuid.UUID) -> AgentOutcome:
-        return await Agent(self.db, self._provider).respond(conversation_id)
+        provider = await self._resolve_provider()
+        return await Agent(self.db, provider).respond(conversation_id)
 
     async def handle_incoming_message(self, message_id: uuid.UUID) -> AgentOutcome:
         message = await InboxRepository(self.db).get_message(message_id)
