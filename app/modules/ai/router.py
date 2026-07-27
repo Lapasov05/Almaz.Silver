@@ -105,10 +105,16 @@ async def get_prompt(db: AsyncSession = Depends(get_db)) -> PromptOut:
     dependencies=[Depends(require_permission("ai:override_ai"))],
 )
 async def agent_respond(
-    conversation_id: uuid.UUID, db: AsyncSession = Depends(get_db)
+    conversation_id: uuid.UUID,
+    force: bool = False,
+    db: AsyncSession = Depends(get_db),
 ) -> AgentRespondOut:
-    """AI javobini qo'lda ishga tushirish (debug/override). LLM kaliti kerak."""
-    outcome = await AgentService(db).respond(conversation_id)
+    """AI javobini qo'lда ishga tushirish (debug/override). LLM kaliti kerak.
+
+    `?force=true` — pauza/handoff/o'chirilган holатда ham AI'ni QAYTA ishga soladi
+    (operator qo'lда AI'ga topshiradi). Global kill-switch va yopiq suhbat baribir hurmat.
+    """
+    outcome = await AgentService(db).respond(conversation_id, force=force)
     return AgentRespondOut(
         status=outcome.status,
         reason=outcome.reason,

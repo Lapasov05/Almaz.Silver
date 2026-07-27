@@ -48,7 +48,13 @@ class Agent:
         self.db = db
         self.provider = provider
 
-    async def respond(self, conversation_id: uuid.UUID) -> AgentOutcome:
+    async def respond(self, conversation_id: uuid.UUID, *, force: bool = False) -> AgentOutcome:
+        """AI javobini ishga tushiradi.
+
+        force=True (operator override): suhbat darajasidagi bloklarни (pauza/handoff/o'chirilган)
+        yorib o'tadi — AI'ni QAYTA ISHGA SOLADI (ai_paused_until tozalanadi, ai_enabled=True) va
+        darhol javob beradi. Global kill-switch (`ai_enabled` setting) va yopiq suhbat baribir hurmat.
+        """
         inbox_repo = InboxRepository(self.db)
         conv = await inbox_repo.get_conversation(conversation_id)
         if conv is None:
@@ -56,14 +62,19 @@ class Agent:
 
         # --- Gating (TZ 5/14) ---
         if not bool(await _setting(self.db, "ai_enabled", True)):
-            return AgentOutcome(status="skipped", reason="ai_disabled")     # global o'chirilgan
-        if not conv.ai_enabled:
-            return AgentOutcome(status="skipped", reason="ai_disabled_conversation")  # shu suhbatда o'chirilgan
+            return AgentOutcome(status="skipped", reason="ai_disabled")  # global kill-switch (force ham hurmat)
         if conv.status == "closed":
             return AgentOutcome(status="skipped", reason="closed")
-        now = datetime.now(timezone.utc)
-        if conv.ai_paused_until is not None and conv.ai_paused_until > now:
-            return AgentOutcome(status="skipped", reason="operator_handoff")  # vaqtincha pauza
+        if force:
+            # Operator qo'lда AI'ни qaytaradi: pauza/handoffни ol, suhbatда AI'ni yoq
+            conv.ai_paused_until = None
+            conv.ai_enabled = True
+        else:
+            if not conv.ai_enabled:
+                return AgentOutcome(status="skipped", reason="ai_disabled_conversation")  # suhbatда o'chirilgan
+            now = datetime.now(timezone.utc)
+            if conv.ai_paused_until is not None and conv.ai_paused_until > now:
+                return AgentOutcome(status="skipped", reason="operator_handoff")  # vaqtincha pauza
         if self.provider is None:
             # LLM hali ulanmagan (tool'lar keyin qo'shiladi) — birinchi xabarga BOSHLANG'ICH salom
             greeting = str(await _setting(self.db, "ai_greeting_text", "") or "")
