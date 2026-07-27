@@ -17,6 +17,7 @@ from app.modules.catalog import models as _catalog_models  # noqa: F401
 from app.modules.delivery import models as _delivery_models  # noqa: F401
 from app.modules.identity import models as _identity_models  # noqa: F401
 from app.modules.inbox import models as _inbox_models  # noqa: F401
+from app.modules.integrations import models as _integrations_models  # noqa: F401
 from app.modules.notifications import models as _notifications_models  # noqa: F401
 from app.modules.orders import models as _orders_models  # noqa: F401
 from app.modules.payments import models as _payments_models  # noqa: F401

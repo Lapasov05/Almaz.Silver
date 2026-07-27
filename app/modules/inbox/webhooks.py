@@ -18,6 +18,7 @@ from app.modules.inbox.channels import telegram as tg
 from app.modules.inbox.repository import InboxRepository
 from app.modules.inbox.service import InboxService
 from app.modules.inbox.tasks import enqueue_incoming
+from app.modules.integrations.service import get_config_value, log_event
 
 settings = get_settings()
 # TZ 15: webhook rate limit (IP bo'yicha)
@@ -37,10 +38,12 @@ async def telegram_webhook(
     db: AsyncSession = Depends(get_db),
     service: InboxService = Depends(get_inbox_service),
 ) -> dict:
-    if not tg.verify_secret(request.headers.get("X-Telegram-Bot-Api-Secret-Token")):
+    secret = await get_config_value(db, "telegram", "webhook_secret")
+    if not tg.verify_secret(request.headers.get("X-Telegram-Bot-Api-Secret-Token"), expected=secret):
         raise AuthError("Telegram secret token noto'g'ri")
 
     update = await request.json()
+    await log_event(db, "telegram", update)  # har xom payload saqlanadi (audit)
 
     # Owner/manager tasdiq/rad tugmalari (TZ 12): callback_query
     callback = update.get("callback_query")
@@ -49,23 +52,27 @@ async def telegram_webhook(
         from app.modules.payments.service import handle_payment_callback
 
         result_text = await handle_payment_callback(db, callback.get("data", ""))
-        await TelegramClient().answer_callback(callback["id"], result_text)
+        token = await get_config_value(db, "telegram", "bot_token")
+        await TelegramClient(bot_token=token).answer_callback(callback["id"], result_text)
         return {"ok": True}
 
     normalized = tg.parse_update(update)
     if normalized is not None:
         message = await service.ingest_incoming(normalized)
         enqueue_incoming(message.id)
+    else:
+        await db.commit()  # payload saqlansin (xabar bo'lmasa ham)
     return {"ok": True}
 
 
 # ==================== Instagram ====================
 @router.get("/instagram")
-async def instagram_verify(request: Request) -> PlainTextResponse:
+async def instagram_verify(request: Request, db: AsyncSession = Depends(get_db)) -> PlainTextResponse:
     """Meta webhook verification (GET hub.challenge)."""
     p = request.query_params
+    verify_token = await get_config_value(db, "instagram", "verify_token")
     challenge = ig.verify_challenge(
-        p.get("hub.mode"), p.get("hub.verify_token"), p.get("hub.challenge")
+        p.get("hub.mode"), p.get("hub.verify_token"), p.get("hub.challenge"), verify_token=verify_token
     )
     if challenge is None:
         raise AuthError("Instagram verify_token noto'g'ri")
@@ -74,14 +81,21 @@ async def instagram_verify(request: Request) -> PlainTextResponse:
 
 @router.post("/instagram", dependencies=[_webhook_rl])
 async def instagram_webhook(
-    request: Request, service: InboxService = Depends(get_inbox_service)
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    service: InboxService = Depends(get_inbox_service),
 ) -> dict:
     raw = await request.body()
-    if not ig.verify_signature(raw, request.headers.get("X-Hub-Signature-256")):
+    app_secret = await get_config_value(db, "instagram", "app_secret")
+    if not ig.verify_signature(raw, request.headers.get("X-Hub-Signature-256"), app_secret=app_secret):
         raise AuthError("Instagram imzo (signature) noto'g'ri")
 
     payload = json.loads(raw or b"{}")
-    for normalized in ig.parse_payload(payload):
+    await log_event(db, "instagram", payload)  # xom payload audit
+    events = ig.parse_payload(payload)
+    for normalized in events:
         message = await service.ingest_incoming(normalized)
         enqueue_incoming(message.id)
+    if not events:
+        await db.commit()
     return {"ok": True}

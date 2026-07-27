@@ -10,9 +10,10 @@ from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, Se
 settings = get_settings()
 
 
-def verify_signature(raw_body: bytes, header_value: str | None) -> bool:
+def verify_signature(raw_body: bytes, header_value: str | None, app_secret: str | None = None) -> bool:
     """Meta `X-Hub-Signature-256: sha256=<hmac>` imzosini tekshiradi (app_secret bilan)."""
-    app_secret = settings.instagram_app_secret
+    if app_secret is None:
+        app_secret = settings.instagram_app_secret
     if not app_secret:  # sozlanmagan bo'lsa dev'da o'tkazib yuboramiz
         return True
     if not header_value or not header_value.startswith("sha256="):
@@ -22,9 +23,12 @@ def verify_signature(raw_body: bytes, header_value: str | None) -> bool:
     return hmac.compare_digest(expected, provided)
 
 
-def verify_challenge(mode: str | None, token: str | None, challenge: str | None) -> str | None:
+def verify_challenge(mode: str | None, token: str | None, challenge: str | None,
+                     verify_token: str | None = None) -> str | None:
     """GET webhook verification (hub.mode=subscribe + hub.verify_token mos)."""
-    if mode == "subscribe" and token and token == settings.instagram_verify_token:
+    if verify_token is None:
+        verify_token = settings.instagram_verify_token
+    if mode == "subscribe" and token and verify_token and token == verify_token:
         return challenge
     return None
 
@@ -59,8 +63,8 @@ def parse_payload(payload: dict) -> list[NormalizedIncoming]:
 class InstagramClient:
     """Instagram Send API klienti (Graph API /me/messages)."""
 
-    def __init__(self) -> None:
-        self._token = settings.instagram_page_access_token
+    def __init__(self, access_token: str | None = None) -> None:
+        self._token = access_token if access_token is not None else settings.instagram_page_access_token
         self._base = settings.instagram_graph_base_url.rstrip("/")
         self._version = settings.instagram_graph_version
 

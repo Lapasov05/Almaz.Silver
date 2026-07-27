@@ -1,6 +1,25 @@
 """Kanal adapterlari uchun umumiy tiplar va interfeys."""
+import re
 from dataclasses import dataclass, field
 from typing import Protocol
+
+# LLM javobidagi markdown belgilarini oddiy matnга aylantirish (TG/IG render qilmaydi)
+_MD_PATTERNS = [
+    (re.compile(r"\*\*(.+?)\*\*", re.DOTALL), r"\1"),   # **bold**
+    (re.compile(r"__(.+?)__", re.DOTALL), r"\1"),       # __bold__
+    (re.compile(r"`{1,3}([^`]+)`{1,3}"), r"\1"),        # `code`
+    (re.compile(r"^#{1,6}\s*", re.MULTILINE), ""),      # # sarlavha
+    (re.compile(r"^\s*[-*]\s+", re.MULTILINE), "• "),   # ro'yxat -> •
+]
+
+
+def strip_markdown(text: str | None) -> str:
+    """Chiquvchi xabardan markdown belgilarini olib tashlaydi (bitta markazlashgan joy)."""
+    if not text:
+        return ""
+    for pattern, repl in _MD_PATTERNS:
+        text = pattern.sub(repl, text)
+    return text
 
 
 class ChannelError(Exception):

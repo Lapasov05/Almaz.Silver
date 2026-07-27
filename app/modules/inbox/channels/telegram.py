@@ -9,12 +9,14 @@ from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, Se
 settings = get_settings()
 
 
-def verify_secret(header_value: str | None) -> bool:
+def verify_secret(header_value: str | None, expected: str | None = None) -> bool:
     """Telegram webhook secret token tekshiruvi (setWebhook secret_token).
 
     Telegram tanani imzolamaydi — o'rniga `X-Telegram-Bot-Api-Secret-Token` header'i ishlatiladi.
+    `expected` berilmasa .env'dan olinadi (DB-token uchun chaqiruvchi uzatadi).
     """
-    expected = settings.telegram_webhook_secret
+    if expected is None:
+        expected = settings.telegram_webhook_secret
     if not expected:  # sozlanmagan bo'lsa dev'da tekshiruvni o'tkazib yuboramiz
         return True
     if not header_value:
@@ -55,8 +57,8 @@ def parse_update(update: dict) -> NormalizedIncoming | None:
 class TelegramClient:
     """Telegram sendMessage klienti."""
 
-    def __init__(self) -> None:
-        self._token = settings.telegram_bot_token
+    def __init__(self, bot_token: str | None = None) -> None:
+        self._token = bot_token if bot_token is not None else settings.telegram_bot_token
         self._base = settings.telegram_api_base_url.rstrip("/")
 
     async def send_text(

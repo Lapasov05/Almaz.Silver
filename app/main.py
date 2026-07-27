@@ -33,6 +33,7 @@ from app.modules.identity.admin_router import router as rbac_router
 from app.modules.identity.router import router as identity_router
 from app.modules.inbox.router import router as inbox_router
 from app.modules.inbox.webhooks import router as webhooks_router
+from app.modules.integrations.router import router as integrations_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.orders.router import router as orders_router
 from app.modules.payments.router import router as payments_router
@@ -198,6 +199,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_router)
     app.include_router(notifications_router)
     app.include_router(files_router)
+    app.include_router(integrations_router)
 
     return app
 

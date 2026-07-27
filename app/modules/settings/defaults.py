@@ -24,6 +24,11 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "ai_temperature": 0.7,
     "llm_model": "gpt-4o",
     "prompt_version": 1,
+    # Boshlang'ich salom (LLM ulanmagan bo'lsa ham birinchi xabarga javob) — INTEGRATIONS
+    "ai_greeting_text": (
+        "Assalomu alaykum! 😊 almazsilver'ga murojaatingiz uchun rahmat. "
+        "Sizga qanday yordam bera olaman?"
+    ),
 
     # --- Yetkazish (TZ 11) — zona bo'yicha fixed narx ---
     "delivery_fee_tashkent": 50000,

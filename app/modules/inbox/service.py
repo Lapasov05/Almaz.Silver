@@ -3,8 +3,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from app.core.exceptions import AppError, NotFoundError
-from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming
-from app.modules.inbox.channels.factory import get_channel_client
+from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, strip_markdown
+from app.modules.inbox.channels.factory import build_channel_client
 from app.modules.inbox.models import (
     Conversation,
     Customer,
@@ -123,8 +123,9 @@ class InboxService:
         await self.repo.db.commit()
 
         try:
-            client = get_channel_client(conv.channel)
-            result = await client.send_text(conv.customer.external_id, text)
+            # Token DB (IntegrationConfig) → .env; markdown tozalanadi
+            client = await build_channel_client(self.repo.db, conv.channel)
+            result = await client.send_text(conv.customer.external_id, strip_markdown(text))
             message.delivery_status = "sent"
             message.external_id = result.external_message_id
         except ChannelError:

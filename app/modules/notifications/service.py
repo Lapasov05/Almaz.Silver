@@ -52,7 +52,10 @@ class NotificationService:
             ]]
         }
         try:
-            await TelegramClient().send_text(str(chat_id), text, reply_markup=keyboard)
+            from app.modules.integrations.service import get_config_value
+
+            token = await get_config_value(self.db, "telegram", "bot_token")
+            await TelegramClient(bot_token=token).send_text(str(chat_id), text, reply_markup=keyboard)
             record.status = "sent"
             await self.db.commit()
             return True

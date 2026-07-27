@@ -65,6 +65,13 @@ class Agent:
         if conv.ai_paused_until is not None and conv.ai_paused_until > now:
             return AgentOutcome(status="skipped", reason="operator_handoff")  # vaqtincha pauza
         if self.provider is None:
+            # LLM hali ulanmagan (tool'lar keyin qo'shiladi) — birinchi xabarga BOSHLANG'ICH salom
+            greeting = str(await _setting(self.db, "ai_greeting_text", "") or "")
+            if greeting and AiState(conv.ai_state) == AiState.greeting:
+                message = await InboxService(inbox_repo).ai_send(conv, greeting)
+                conv.ai_state = AiState.browsing.value
+                await self.db.commit()
+                return AgentOutcome(status="replied", reply=greeting, message_id=message.id, state=conv.ai_state)
             logger.info("LLM provayder yo'q — AI jim (conv=%s)", conv.id)
             return AgentOutcome(status="skipped", reason="no_provider")
 
