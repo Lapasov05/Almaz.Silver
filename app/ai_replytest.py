@@ -51,7 +51,8 @@ async def main() -> None:
 
         # 2) Global setting
         s = await SettingsRepository(db).get("ai_enabled")
-        print(f"[2] ai_enabled (global): {s.value if s else '(yo\\'q -> default True)'}")
+        ai_glob = s.value if s else "(yo'q -> default True)"
+        print(f"[2] ai_enabled (global): {ai_glob}")
 
         # 3) Target conversation
         conv = await latest_conv(db, channel)
