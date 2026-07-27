@@ -99,6 +99,11 @@ tg-events: ## Telegram eventlar
 	$(DC) exec -T postgres psql -U $(PGUSER) -d $(PGDB) -c \
 	 "SELECT created_at,status,left(raw::text,120) FROM integration_event WHERE provider='telegram' ORDER BY created_at DESC LIMIT 10;"
 
+# ==================== To'liq self-test ====================
+.PHONY: test-webhooks
+test-webhooks: ## TG+IG to'liq test (config + ulanish + imzolangan POST -> ingest)
+	$(DC) exec -T api python -m app.webhook_selftest
+
 # ==================== Instagram webhook debug ====================
 .PHONY: ig-verify ig-subscribe ig-check
 ig-verify: ## GET verify handshake'ni LOKAL sinash (verify_token DB'dan) — challenge qaytishi kerak
