@@ -200,6 +200,42 @@ class Variant(UUIDMixin, TimestampMixin, Base):
         return self.stock_qty - self.reserved_qty
 
 
+class Box(UUIDMixin, TimestampMixin, Base):
+    """Kategoriyaning rangli qutisi (packaging) — har rang ALOHIDA yozuv.
+
+    Foydalanuvchi qarorlari:
+    - Har KATEGORIYA o'z rang ro'yxatiga ega (dynamic qo'shish/o'chirish); umumiy emas.
+    - Har rangda ALOHIDA narx: `price=0` -> tekin, `>0` -> pulli.
+    - Count (zaxira) har rangda — Variant kabi (`stock_qty`/`reserved_qty`, TZ 10 reservation).
+    - Boshqaruv «category bo'limi»da (kategoriyaga scoped endpointlar).
+    """
+
+    __tablename__ = "box"
+
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("category.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name_uz: Mapped[str] = mapped_column(String(100), nullable=False)      # rang nomi, masalan "Qizil"
+    name_ru: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    color_hex: Mapped[str | None] = mapped_column(String(9), nullable=True)  # UI swatch, masalan "#E53935"
+    price: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default="0", nullable=False)  # 0 = tekin
+    stock_qty: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    reserved_qty: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    category: Mapped["Category"] = relationship()
+
+    @property
+    def available(self) -> int:
+        return self.stock_qty - self.reserved_qty
+
+    @property
+    def is_free(self) -> bool:
+        return self.price == 0
+
+
 class ProductMedia(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "product_media"
 

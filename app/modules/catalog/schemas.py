@@ -1,5 +1,6 @@
 """catalog Pydantic DTO'lari (ko'p tilli + reference jadvallar)."""
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -82,6 +83,44 @@ class VariantUpdate(BaseModel):
 class StockAdjust(BaseModel):
     stock_qty: int | None = Field(default=None, ge=0)
     delta: int | None = None
+
+
+# ---------- Box (kategoriyaning rangli qutisi) ----------
+class BoxCreate(BaseModel):
+    name_uz: str = Field(min_length=1, max_length=100)          # rang nomi, masalan "Qizil"
+    name_ru: str | None = Field(default=None, max_length=100)
+    color_hex: str | None = Field(default=None, max_length=9)   # "#E53935"
+    price: Decimal = Field(default=Decimal("0"), ge=0)          # 0 = tekin
+    stock_qty: int = Field(default=0, ge=0)
+    is_active: bool = True
+    sort_order: int = 0
+
+
+class BoxUpdate(BaseModel):
+    name_uz: str | None = Field(default=None, min_length=1, max_length=100)
+    name_ru: str | None = Field(default=None, max_length=100)
+    color_hex: str | None = Field(default=None, max_length=9)
+    price: Decimal | None = Field(default=None, ge=0)
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+
+class BoxOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    category_id: uuid.UUID
+    name_uz: str
+    name_ru: str | None
+    color_hex: str | None
+    price: Decimal
+    is_free: bool
+    stock_qty: int
+    reserved_qty: int
+    available: int
+    is_active: bool
+    sort_order: int
+    created_at: datetime
 
 
 class VariantOut(BaseModel):

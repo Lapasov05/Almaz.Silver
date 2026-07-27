@@ -97,12 +97,17 @@ class PaymentService:
         payment.reviewed_by = reviewer_id
         payment.reviewed_at = _utcnow()
 
-        # TZ 10: approved → stock_qty--, reserved_qty--
+        # TZ 10: approved → stock_qty--, reserved_qty-- (variant + box)
         for item in order.items:
             variant = await self.catalog.get_variant(item.variant_id)
             if variant is not None:
                 variant.stock_qty = max(0, variant.stock_qty - item.quantity)
                 variant.reserved_qty = max(0, variant.reserved_qty - item.quantity)
+            if item.box_id is not None:
+                box = await self.catalog.get_box(item.box_id)
+                if box is not None:
+                    box.stock_qty = max(0, box.stock_qty - item.quantity)
+                    box.reserved_qty = max(0, box.reserved_qty - item.quantity)
 
         # Order: → confirmed (operatorga tushadi)
         order.history.append(
@@ -134,13 +139,17 @@ class PaymentService:
         payment.reviewed_by = reviewer_id
         payment.reviewed_at = _utcnow()
 
-        # TZ 10: to'lov rejected → reserved_qty-- (band bo'shaydi)
+        # TZ 10: to'lov rejected → reserved_qty-- (band bo'shaydi; variant + box)
         order = await self.orders.get(payment.order_id)
         if order is not None:
             for item in order.items:
                 variant = await self.catalog.get_variant(item.variant_id)
                 if variant is not None:
                     variant.reserved_qty = max(0, variant.reserved_qty - item.quantity)
+                if item.box_id is not None:
+                    box = await self.catalog.get_box(item.box_id)
+                    if box is not None:
+                        box.reserved_qty = max(0, box.reserved_qty - item.quantity)
 
         await AuditService(self.db).record(
             action="payment.reject", entity_type="payment", entity_id=payment.id,

@@ -41,6 +41,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "engraving_enabled": True,
     "engraving_price": 50000,
 
+    # --- Qo'shimcha xizmat: box (rangli quti) ---
+    # Global on/off. Narx/rang/zaxira har kategoriyada alohida (category bo'limi).
+    "boxes_enabled": True,
+
     # --- Sklad ---
     "low_stock_threshold": 10,  # global «kam qolgan» chegarasi (mahsulotда override bo'lishi mumkin)
 

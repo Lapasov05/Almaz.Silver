@@ -73,6 +73,12 @@ class OrdersService:
             Decimal(str(engraving_price_setting.value)) if engraving_price_setting is not None else Decimal("0")
         )
 
+        # Box (rangli quti) — global on/off
+        boxes_enabled_setting = await settings_repo.get("boxes_enabled")
+        boxes_enabled = (
+            bool(boxes_enabled_setting.value) if boxes_enabled_setting is not None else False
+        )
+
         order = Order(
             order_no=await self._generate_order_no(),
             customer_id=customer_id,
@@ -113,7 +119,30 @@ class OrdersService:
                     else default_engraving_price
                 )
 
-            items_total += (unit_price + engraving_price) * it.quantity
+            # --- Box (rangli quti) narxi + zaxira band qilish ---
+            box_id = None
+            box_price = Decimal("0")
+            box_label = None
+            if it.box_id is not None:
+                if not boxes_enabled:
+                    raise AppError("Box (quti) xizmati hozircha o'chirilgan")
+                box = await self.catalog.get_box(it.box_id)
+                if box is None or not box.is_active:
+                    raise AppError(f"Box topilmadi yoki faol emas: {it.box_id}")
+                # Box mahsulot kategoriyasiga tegishli bo'lishi shart (boshqa kategoriya box'i emas)
+                if product.category_id is None or box.category_id != product.category_id:
+                    raise AppError("Box bu mahsulot kategoriyasiga tegishli emas")
+                if box.available < it.quantity:
+                    raise AppError(
+                        f"Box zaxirasi yetarli emas ({box.name_uz}): mavjud {box.available}, so'ralgan {it.quantity}"
+                    )
+                box.reserved_qty += it.quantity  # TZ 10: reservation (variant kabi)
+                box_id = box.id
+                box_price = box.price  # snapshot (0 = tekin)
+                cat_name = product.category.name_uz if product.category is not None else None
+                box_label = f"{cat_name} — {box.name_uz}" if cat_name else box.name_uz
+
+            items_total += (unit_price + engraving_price + box_price) * it.quantity
 
             order.items.append(
                 OrderItem(
@@ -124,6 +153,9 @@ class OrdersService:
                     bonus_snapshot=bonus_snapshot,
                     engraving_text=engraving_text,
                     engraving_price=engraving_price,
+                    box_id=box_id,
+                    box_price=box_price,
+                    box_label=box_label,
                 )
             )
 
@@ -178,8 +210,12 @@ class OrdersService:
         )
 
     async def _release_reservation(self, order: Order) -> None:
-        """Band qilingan zaxirani bo'shatadi (reserved_qty--), TZ 10."""
+        """Band qilingan zaxirani bo'shatadi (reserved_qty--), TZ 10. Variant + box."""
         for item in order.items:
             variant = await self.catalog.get_variant(item.variant_id)
             if variant is not None:
                 variant.reserved_qty = max(0, variant.reserved_qty - item.quantity)
+            if item.box_id is not None:
+                box = await self.catalog.get_box(item.box_id)
+                if box is not None:
+                    box.reserved_qty = max(0, box.reserved_qty - item.quantity)

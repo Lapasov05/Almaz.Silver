@@ -82,6 +82,14 @@ class OrderItem(UUIDMixin, TimestampMixin, Base):
     engraving_price: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), server_default="0", nullable=False
     )
+    # --- Box (rangli quti) — o'lcham/gravyurka kabi order_item darajasida, ixtiyoriy ---
+    box_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("box.id", ondelete="SET NULL"), nullable=True
+    )
+    # Buyurtma vaqtidagi BIR DONA box narxi (snapshot; 0 = tekin yoki boxsiz)
+    box_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default="0", nullable=False)
+    # Box nomi nusxasi (tarix uchun — box keyin o'chsa/o'zgarsa ham ko'rinadi), masalan "Uzuklar — Qizil"
+    box_label: Mapped[str | None] = mapped_column(String(150), nullable=True)
 
     order: Mapped["Order"] = relationship(back_populates="items")
 

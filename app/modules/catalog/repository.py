@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.pagination import PageParams, paginate
 from app.modules.catalog.models import (
+    Box,
     Category,
     Gender,
     Material,
@@ -168,6 +169,33 @@ class CatalogRepository:
         return res.scalars().first()
 
     # ---------- Media ----------
+    # ---------- Box (kategoriyaning rangli qutisi) ----------
+    async def get_box(self, box_id: uuid.UUID) -> Box | None:
+        res = await self.db.execute(
+            select(Box).where(Box.id == box_id, Box.deleted_at.is_(None))
+        )
+        return res.scalar_one_or_none()
+
+    async def list_boxes(self, *, category_id: uuid.UUID, only_active: bool, pp: PageParams):
+        """Kategoriyaning box (rang) ro'yxati — admin (category bo'limi)."""
+        stmt = select(Box).where(Box.category_id == category_id, Box.deleted_at.is_(None))
+        if only_active:
+            stmt = stmt.where(Box.is_active.is_(True))
+        return await paginate(self.db, stmt, [Box.sort_order, Box.name_uz], pp)
+
+    async def list_active_boxes(self, category_id: uuid.UUID) -> list[Box]:
+        """Faol boxlar (AI tool / checkout uchun) — pagination'siz, tartiblangan."""
+        res = await self.db.execute(
+            select(Box)
+            .where(
+                Box.category_id == category_id,
+                Box.deleted_at.is_(None),
+                Box.is_active.is_(True),
+            )
+            .order_by(Box.sort_order, Box.name_uz)
+        )
+        return list(res.scalars().all())
+
     async def get_media(self, media_id: uuid.UUID) -> ProductMedia | None:
         return await self.db.get(ProductMedia, media_id)
 

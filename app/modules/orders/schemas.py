@@ -14,6 +14,8 @@ class OrderItemCreate(BaseModel):
     ring_size: str | None = Field(default=None, max_length=10)  # TZ: o'lcham order'da
     # Ism yozish (gravyurka): matn berilsa xizmat narxi qo'shiladi
     engraving_text: str | None = Field(default=None, max_length=50)
+    # Box (rangli quti) — ixtiyoriy; berilsa mahsulot kategoriyasidagi box bo'lishi kerak
+    box_id: uuid.UUID | None = None
 
 
 class OrderCreate(BaseModel):
@@ -35,7 +37,10 @@ class OrderItemOut(BaseModel):
     ring_size: str | None
     bonus_snapshot: list | None
     engraving_text: str | None
-    engraving_price: Decimal  # bir dona uchun (jami: (unit_price + engraving_price) * quantity)
+    engraving_price: Decimal  # bir dona uchun (jami: (unit_price + engraving_price + box_price) * quantity)
+    box_id: uuid.UUID | None
+    box_price: Decimal  # bir dona box narxi (snapshot; 0 = tekin/boxsiz)
+    box_label: str | None
 
 
 class OrderStatusHistoryOut(BaseModel):

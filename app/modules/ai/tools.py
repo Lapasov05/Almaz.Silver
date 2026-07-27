@@ -131,12 +131,31 @@ TOOL_SPECS: list[dict] = [
                                     "type": "string",
                                     "description": "Uzukka yoziladigan ism (faqat engraving.available=true bo'lsa)",
                                 },
+                                "box_id": {
+                                    "type": "string",
+                                    "description": "Tanlangan rangli quti (box) id — list_boxes natijasidan. Ixtiyoriy.",
+                                },
                             },
                             "required": ["variant_id"],
                         },
                     }
                 },
                 "required": ["items"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_boxes",
+            "description": (
+                "Mahsulot kategoriyasi uchun mavjud rangli qutilar (box) ro'yxati — mijoz qadoq/quti "
+                "so'raganda yoki taklif qilishdan oldin. Narx 0 = tekin. Faqat zaxirada borlari qaytadi."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"product_id": {"type": "string"}},
+                "required": ["product_id"],
             },
         },
     },
@@ -221,6 +240,28 @@ async def _engraving_settings(db: AsyncSession) -> tuple[bool, Decimal]:
     return enabled, Decimal(str(price))
 
 
+def _box_brief(box) -> dict:
+    """AI uchun box (rang) qisqacha: narx 0 = tekin, faqat zaxirada borlar taklif qilinadi."""
+    return {
+        "box_id": str(box.id),
+        "color": box.name_uz,
+        "color_hex": box.color_hex,
+        "price": _num(box.price),  # 0.0 = tekin
+        "free": box.is_free,
+        "available": max(box.available, 0),
+    }
+
+
+async def _boxes_for_product(db: AsyncSession, product: Product) -> list[dict]:
+    """Mahsulot kategoriyasidagi faol + zaxirada bor boxlar (boxes_enabled bo'lsa)."""
+    if product.category_id is None:
+        return []
+    if not bool(await _get_setting(db, "boxes_enabled", False)):
+        return []
+    boxes = await CatalogRepository(db).list_active_boxes(product.category_id)
+    return [_box_brief(b) for b in boxes if b.available > 0]
+
+
 def _num(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
 
@@ -251,7 +292,14 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             for v in product.variants
             if v.deleted_at is None
         ]
+        brief["boxes"] = await _boxes_for_product(db, product)  # kategoriya rangli qutilari
         return brief
+
+    if name == "list_boxes":
+        product = await CatalogRepository(db).get_product(uuid.UUID(args["product_id"]))
+        if product is None:
+            return {"boxes": [], "error": "mahsulot topilmadi"}
+        return {"boxes": await _boxes_for_product(db, product)}
 
     if name == "check_stock":
         variant = await CatalogRepository(db).get_variant(uuid.UUID(args["variant_id"]))
@@ -300,6 +348,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 quantity=int(it.get("quantity", 1)),
                 ring_size=it.get("ring_size"),
                 engraving_text=it.get("engraving_text"),
+                box_id=uuid.UUID(it["box_id"]) if it.get("box_id") else None,
             )
             for it in args.get("items", [])
         ]

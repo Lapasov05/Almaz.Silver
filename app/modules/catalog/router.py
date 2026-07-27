@@ -13,6 +13,9 @@ from app.core.deps import require_permission
 from app.core.pagination import Page, PageParams, page_params, page_params_ref
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.catalog.schemas import (
+    BoxCreate,
+    BoxOut,
+    BoxUpdate,
     CategoryCreate,
     CategoryOut,
     CategoryUpdate,
@@ -103,6 +106,45 @@ async def update_category(category_id: uuid.UUID, payload: CategoryUpdate, servi
 @router.delete("/categories/{category_id}", status_code=204, dependencies=[_DELETE])
 async def delete_category(category_id: uuid.UUID, service: CatalogService = Depends(svc)):
     await service.delete_category(category_id)
+
+
+# ==================== Box (kategoriyaning rangli qutilari) — «category bo'limi»da ====================
+@router.get("/categories/{category_id}/boxes", response_model=Page[BoxOut], dependencies=[_VIEW])
+async def list_category_boxes(
+    category_id: uuid.UUID,
+    only_active: bool = False,
+    pp: PageParams = Depends(page_params_ref),
+    service: CatalogService = Depends(svc),
+):
+    items, total = await service.list_boxes(category_id, only_active=only_active, pp=pp)
+    return Page[BoxOut](items=items, total=total, limit=pp.limit, offset=pp.offset)
+
+
+@router.post("/categories/{category_id}/boxes", response_model=BoxOut, dependencies=[_CREATE])
+async def create_category_box(
+    category_id: uuid.UUID, payload: BoxCreate, service: CatalogService = Depends(svc)
+):
+    return BoxOut.model_validate(await service.create_box(category_id, payload))
+
+
+@router.get("/boxes/{box_id}", response_model=BoxOut, dependencies=[_VIEW])
+async def get_box(box_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    return BoxOut.model_validate(await service.get_box(box_id))
+
+
+@router.patch("/boxes/{box_id}", response_model=BoxOut, dependencies=[_UPDATE])
+async def update_box(box_id: uuid.UUID, payload: BoxUpdate, service: CatalogService = Depends(svc)):
+    return BoxOut.model_validate(await service.update_box(box_id, payload))
+
+
+@router.delete("/boxes/{box_id}", status_code=204, dependencies=[_DELETE])
+async def delete_box(box_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    await service.delete_box(box_id)
+
+
+@router.post("/boxes/{box_id}/stock", response_model=BoxOut, dependencies=[_UPDATE])
+async def adjust_box_stock(box_id: uuid.UUID, payload: StockAdjust, service: CatalogService = Depends(svc)):
+    return BoxOut.model_validate(await service.adjust_box_stock(box_id, payload))
 
 
 # ==================== Products ====================

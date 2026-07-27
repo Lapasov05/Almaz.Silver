@@ -10,6 +10,7 @@ import uuid
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams
 from app.modules.catalog.models import (
+    Box,
     Category,
     Product,
     ProductMedia,
@@ -17,6 +18,8 @@ from app.modules.catalog.models import (
 )
 from app.modules.catalog.repository import REFERENCE_MODELS, CatalogRepository
 from app.modules.catalog.schemas import (
+    BoxCreate,
+    BoxUpdate,
     CategoryCreate,
     CategoryUpdate,
     MediaCreate,
@@ -197,6 +200,51 @@ class CatalogService:
             raise AppError("stock_qty yoki delta ko'rsatilishi kerak")
         await self.repo.db.commit()
         return variant
+
+    # ==================== Box (kategoriyaning rangli qutisi) ====================
+    async def list_boxes(self, category_id: uuid.UUID, *, only_active: bool, pp: PageParams):
+        await self.get_category(category_id)  # kategoriya bor-yo'qligini tekshiradi (404)
+        return await self.repo.list_boxes(category_id=category_id, only_active=only_active, pp=pp)
+
+    async def get_box(self, box_id: uuid.UUID) -> Box:
+        box = await self.repo.get_box(box_id)
+        if box is None:
+            raise NotFoundError("Box topilmadi")
+        return box
+
+    async def create_box(self, category_id: uuid.UUID, data: BoxCreate) -> Box:
+        await self.get_category(category_id)  # kategoriya mavjudligini tasdiqlaydi
+        box = Box(category_id=category_id, **data.model_dump())
+        await self.repo.add(box)
+        await self.repo.db.commit()
+        return await self.get_box(box.id)
+
+    async def update_box(self, box_id: uuid.UUID, data: BoxUpdate) -> Box:
+        box = await self.get_box(box_id)
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(box, field, value)
+        await self.repo.db.commit()
+        return await self.get_box(box_id)
+
+    async def delete_box(self, box_id: uuid.UUID) -> None:
+        """Soft delete — tarixiy buyurtmalar (order_item.box_id) buzilmaydi."""
+        box = await self.get_box(box_id)
+        box.deleted_at = _utcnow()
+        await self.repo.db.commit()
+
+    async def adjust_box_stock(self, box_id: uuid.UUID, data: StockAdjust) -> Box:
+        box = await self.get_box(box_id)
+        if data.stock_qty is not None:
+            box.stock_qty = data.stock_qty
+        elif data.delta is not None:
+            new_qty = box.stock_qty + data.delta
+            if new_qty < 0:
+                raise AppError("Zaxira manfiy bo'la olmaydi")
+            box.stock_qty = new_qty
+        else:
+            raise AppError("stock_qty yoki delta ko'rsatilishi kerak")
+        await self.repo.db.commit()
+        return box
 
     # ==================== Media ====================
     def _build_media(self, data: MediaCreate) -> ProductMedia:
