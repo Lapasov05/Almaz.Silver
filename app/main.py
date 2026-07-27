@@ -2,10 +2,12 @@
 
 Barcha modul routerlari + hardening (structured logging, request middleware, readiness).
 """
+import asyncio
 import os
 import secrets
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request, status
@@ -68,6 +70,27 @@ def verify_docs_auth(
         raise unauthorized
 
 
+async def _startup_telegram_webhook() -> None:
+    """Ishga tushganда Telegram webhook'ni avtomatik ulash (fon, best-effort)."""
+    from app.core.database import task_session
+    from app.modules.integrations.service import ensure_telegram_webhook
+
+    log = get_logger("almaz.startup")
+    try:
+        async with task_session() as db:
+            result = await ensure_telegram_webhook(db)
+        log.info("telegram_webhook_startup", result=result)
+    except Exception:  # noqa: BLE001 — startup hech qachon bu tufayli buzilmaydi
+        log.warning("telegram_webhook_startup_failed", exc_info=True)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # Fon vazifa: uvicorn startup'ini BLOKLAMAYDI (Telegram sekin bo'lsa ham)
+    asyncio.create_task(_startup_telegram_webhook())
+    yield
+
+
 def create_app() -> FastAPI:
     configure_logging()
     log = get_logger("almaz.request")
@@ -75,6 +98,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version="1.0.0",
+        lifespan=lifespan,
         # Standart hujjat yo'llari o'chirilgan — quyida himoyalangan holda qayta ochiladi
         docs_url=None,
         redoc_url=None,

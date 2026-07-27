@@ -46,6 +46,32 @@ async def log_event(db: AsyncSession, provider: str, raw: dict, *, status: str =
         pass
 
 
+async def ensure_telegram_webhook(db: AsyncSession) -> str:
+    """Ishga tushganда webhook'ni avtomatik ulaydi. Ulangan bo'lsa tegmaydi.
+
+    Qaytadi: disabled | no_token | skip_not_https | already_connected | set.
+    """
+    if not settings.telegram_auto_webhook:
+        return "disabled"
+    token = await get_config_value(db, "telegram", "bot_token")
+    if not token:
+        return "no_token"  # token yo'q — hech narsa qilinmaydi
+    base = settings.public_base_url.rstrip("/")
+    if not base.startswith("https://"):
+        return "skip_not_https"  # Telegram faqat https public URL qabul qiladi (dev'da o'tkazamiz)
+
+    desired = f"{base}/webhooks/telegram"
+    svc = IntegrationService(db)
+    try:
+        info = await svc.telegram_webhook_info()
+        if (info or {}).get("url") == desired:
+            return "already_connected"  # allaqachon shu URL'ga ulangan — TEGMAYMIZ
+    except Exception:  # noqa: BLE001 — info olinmasa ham set qilib ko'ramiz
+        pass
+    await svc.telegram_set_webhook(desired)
+    return "set"
+
+
 class IntegrationService:
     def __init__(self, db: AsyncSession):
         self.db = db

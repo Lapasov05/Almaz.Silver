@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_webhook_secret: str = ""  # setWebhook secret_token bilan tekshiruv
     telegram_api_base_url: str = "https://api.telegram.org"
+    telegram_auto_webhook: bool = True  # ishga tushganда webhook'ni avtomatik ulash
 
     # --- Instagram / Meta Graph API (TZ 3/15-bo'lim) ---
     instagram_app_secret: str = ""        # X-Hub-Signature-256 HMAC uchun
