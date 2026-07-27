@@ -17,8 +17,12 @@ DELETE /integrations/configs/{id}
 ```
 **Token o'qish:** FAQAT IntegrationConfig (DB, aktiv). **`.env`дан OLINMAYDI** — token yagona manba DB
 (shunda API orqali o'zgartirsangiz darhol qo'llanadi, env eski qiymatni bermaydi). Kalitlar:
-`telegram/bot_token`, `telegram/webhook_secret`, `instagram/access_token`, `instagram/verify_token`,
-`instagram/app_secret`, `openai/api_key`, `openai/base_url`.
+`telegram/bot_token`, `telegram/webhook_secret`, `instagram/access_token`, `instagram/business_id`,
+`instagram/verify_token`, `instagram/app_secret`, `openai/api_key`, `openai/base_url`.
+
+> **`instagram/business_id`** (IG business akkaunt id) — send endpoint uchun: bo'lsa
+> `{business_id}/messages` va `{business_id}/subscribed_apps`, aks holда `me/...`. Instagram Login
+> (IGAA token) oqimida akkauntни aniq ko'rsatish uchun.
 
 > **Yangilanish:** avval `.env` fallback bor edi — olib tashlandi. `.env`da endi faqat sir bo'lmagan
 > bazaviy URL/knoblar (`TELEGRAM_API_BASE_URL`, `INSTAGRAM_GRAPH_*`, `LLM_PROVIDER`, `TELEGRAM_AUTO_WEBHOOK`).

@@ -22,5 +22,6 @@ async def build_channel_client(db, channel: str) -> ChannelClient:
         return TelegramClient(bot_token=token)
     if channel == "instagram":
         token = await get_config_value(db, "instagram", "access_token")
-        return InstagramClient(access_token=token)
+        business_id = await get_config_value(db, "instagram", "business_id")
+        return InstagramClient(access_token=token, business_id=business_id or None)
     raise ChannelError(f"Noma'lum kanal: {channel}")

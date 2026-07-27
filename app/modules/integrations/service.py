@@ -138,7 +138,10 @@ class IntegrationService:
         if not token:
             raise AppError("Instagram access_token sozlanmagan")
         base = settings.instagram_graph_base_url.rstrip("/")
-        url = f"{base}/{settings.instagram_graph_version}/me/subscribed_apps"
+        # business_id bo'lsa `{business_id}/subscribed_apps`, aks holда `me/subscribed_apps`
+        business_id = (await get_config_value(self.db, "instagram", "business_id")).strip()
+        target = business_id or "me"
+        url = f"{base}/{settings.instagram_graph_version}/{target}/subscribed_apps"
         async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as c:
             resp = await c.post(url, params={"access_token": token, "subscribed_fields": "messages"})
         if resp.status_code >= 400:

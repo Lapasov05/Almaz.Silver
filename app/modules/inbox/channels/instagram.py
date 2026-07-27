@@ -63,15 +63,17 @@ def parse_payload(payload: dict) -> list[NormalizedIncoming]:
 class InstagramClient:
     """Instagram Send API klienti (Graph API /me/messages)."""
 
-    def __init__(self, access_token: str | None = None) -> None:
+    def __init__(self, access_token: str | None = None, business_id: str | None = None) -> None:
         self._token = access_token or ""  # token DB'дан beriladi
+        # Send endpoint: `{business_id}/messages` (DB'да business_id bo'lsa) yoki `me/messages`
+        self._sender = (business_id or "").strip() or "me"
         self._base = settings.instagram_graph_base_url.rstrip("/")
         self._version = settings.instagram_graph_version
 
     async def send_text(self, recipient_id: str, text: str) -> SendResult:
         if not self._token:
-            raise ChannelError("INSTAGRAM_PAGE_ACCESS_TOKEN sozlanmagan")
-        url = f"{self._base}/{self._version}/me/messages"
+            raise ChannelError("Instagram access_token sozlanmagan")
+        url = f"{self._base}/{self._version}/{self._sender}/messages"
         body = {"recipient": {"id": recipient_id}, "message": {"text": text}}
         async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
             resp = await client.post(url, params={"access_token": self._token}, json=body)

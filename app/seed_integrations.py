@@ -22,6 +22,7 @@ DEMO_INTEGRATIONS = [
     ("telegram", "bot_token", "123456:ABC-DEF-bot-token-bu-yerga"),
     ("telegram", "webhook_secret", "webhook-maxfiy-kalit"),
     ("instagram", "access_token", "IGAAxxxxxxxx-access-token"),
+    ("instagram", "business_id", "17841400000000000"),  # IG business akkaunt id (send endpoint)
     ("instagram", "verify_token", "verify-token-meta-konsolда-bir-xil"),
     ("instagram", "app_secret", "meta-app-secret-hmac-uchun"),
     ("openai", "api_key", "sk-...-openai-api-key"),
