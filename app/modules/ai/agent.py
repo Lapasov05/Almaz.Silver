@@ -79,51 +79,61 @@ class Agent:
         prompt_version = int(await _setting(self.db, "prompt_version", 1) or 1)
         override = await _setting(self.db, "system_prompt_override", None)
         system_prompt = build_system_prompt(prompt_version, override)
-        messages = await memory_mod.build_messages(
-            self.db, conv, conv.customer, system_prompt, settings.ai_memory_message_count
-        )
-
-        model = str(await _setting(self.db, "llm_model", settings.ai_default_model) or settings.ai_default_model)
-        temperature = float(
-            await _setting(self.db, "ai_temperature", settings.ai_default_temperature)
-            or settings.ai_default_temperature
-        )
-
         # --- Tool-calling sikli (TZ 7.4) ---
         ctx = ToolContext(db=self.db, conversation=conv)
         used_tools: list[str] = []
         text: str | None = None
-        for _ in range(settings.ai_max_tool_iterations):
-            result = await self.provider.complete(
-                messages, TOOL_SPECS, model=model, temperature=temperature
+        try:
+            messages = await memory_mod.build_messages(
+                self.db, conv, conv.customer, system_prompt, settings.ai_memory_message_count
             )
-            if result.tool_calls:
-                messages.append(
-                    LlmMessage(role="assistant", content=result.content, tool_calls=result.tool_calls)
+            model = str(
+                await _setting(self.db, "llm_model", settings.ai_default_model) or settings.ai_default_model
+            )
+            temperature = float(
+                await _setting(self.db, "ai_temperature", settings.ai_default_temperature)
+                or settings.ai_default_temperature
+            )
+            for _ in range(settings.ai_max_tool_iterations):
+                result = await self.provider.complete(
+                    messages, TOOL_SPECS, model=model, temperature=temperature
                 )
-                for tc in result.tool_calls:
-                    used_tools.append(tc.name)
-                    try:
-                        output = await dispatch(tc.name, tc.arguments, ctx)
-                    except Exception as exc:  # noqa: BLE001 — tool xatosi suhbatni to'xtatmasin
-                        logger.warning("Tool '%s' xato: %s", tc.name, exc)
-                        output = {"error": str(exc)}
+                if result.tool_calls:
                     messages.append(
-                        LlmMessage(
-                            role="tool",
-                            tool_call_id=tc.id,
-                            name=tc.name,
-                            content=json.dumps(output, ensure_ascii=False, default=str),
-                        )
+                        LlmMessage(role="assistant", content=result.content, tool_calls=result.tool_calls)
                     )
-                continue
-            text = result.content or ""
-            break
-        else:
-            # Sikl tugadi — operatorga o'tkazamiz
-            text = "Kechirasiz, so'rovingizni to'liq bajara olmadim. Operator tez orada bog'lanadi."
-            used_tools.append("handoff_to_operator")
-            conv.ai_state = AiState.handed_off.value
+                    for tc in result.tool_calls:
+                        used_tools.append(tc.name)
+                        try:
+                            output = await dispatch(tc.name, tc.arguments, ctx)
+                        except Exception as exc:  # noqa: BLE001 — tool xatosi suhbatni to'xtatmasin
+                            logger.warning("Tool '%s' xato: %s", tc.name, exc)
+                            output = {"error": str(exc)}
+                        messages.append(
+                            LlmMessage(
+                                role="tool",
+                                tool_call_id=tc.id,
+                                name=tc.name,
+                                content=json.dumps(output, ensure_ascii=False, default=str),
+                            )
+                        )
+                    continue
+                text = result.content or ""
+                break
+            else:
+                # Sikl tugadi — operatorga o'tkazamiz
+                text = "Kechirasiz, so'rovingizni to'liq bajara olmadim. Operator tez orada bog'lanadi."
+                used_tools.append("handoff_to_operator")
+                conv.ai_state = AiState.handed_off.value
+        except Exception as exc:  # noqa: BLE001
+            # LLM/OpenAI xatosi 500 bermasin — jim skip + logда to'liq traceback + reason'да sabab
+            logger.exception("AI javob berolmadi — LLM xatosi (conv=%s)", conv.id)
+            return AgentOutcome(
+                status="skipped",
+                reason=f"llm_error: {type(exc).__name__}: {str(exc)[:300]}",
+                state=conv.ai_state,
+                used_tools=used_tools,
+            )
 
         # --- Guardrail (TZ 15, KRITIK) ---
         guard = enforce(text)
