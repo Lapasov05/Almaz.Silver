@@ -9,11 +9,14 @@ PGUSER ?= almaz
 PGDB   ?= almaz
 DC = docker compose
 
-# Konteyner ichida login qilib token oladigan + so'rov yuboradigan python snippet
+# Konteyner ichida login qilib token oladigan + so'rov yuboradigan python snippet.
+# Login muvaffaqiyatsiz bo'lsa aniq xabar beradi (parol boshqa bo'lsa: make <t> EMAIL=... PASS=...)
 define API_PY
-$(DC) exec -T api python -c "import httpx; b='http://localhost:8000'; \
-t=httpx.post(b+'/auth/login',json={'email':'$(EMAIL)','password':'$(PASS)'},timeout=15).json().get('access_token'); \
-h={'Authorization':'Bearer '+t}; import json; $(1)"
+$(DC) exec -T api python -c "import httpx,sys,json; b='http://localhost:8000'; \
+r=httpx.post(b+'/auth/login',json={'email':'$(EMAIL)','password':'$(PASS)'},timeout=15); \
+t=r.json().get('access_token'); \
+sys.exit('LOGIN XATO ('+str(r.status_code)+'): admin parol boshqami? -> make <target> EMAIL=... PASS=...') if not t else None; \
+h={'Authorization':'Bearer '+t}; $(1)"
 endef
 
 .DEFAULT_GOAL := help
