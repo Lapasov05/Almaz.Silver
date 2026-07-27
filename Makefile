@@ -108,6 +108,10 @@ test-webhooks: ## TG+IG to'liq test (config + ulanish + imzolangan POST -> inges
 test-send: ## Jonli outbound: send API javob yuboradimi (make test-send TG=<chatid> IG=<igsid>)
 	$(DC) exec -T -e TG_TO=$(TG) -e IG_TO=$(IG) api python -m app.webhook_sendtest
 
+.PHONY: test-ai
+test-ai: ## AI nega javob bermayapti — diagnostika (make test-ai CH=instagram|telegram)
+	$(DC) exec -T -e CH=$(CH) api python -m app.ai_replytest
+
 # ==================== Instagram webhook debug ====================
 .PHONY: ig-verify ig-subscribe ig-check
 ig-verify: ## GET verify handshake'ni LOKAL sinash (verify_token DB'dan) — challenge qaytishi kerak
