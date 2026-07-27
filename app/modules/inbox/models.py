@@ -152,7 +152,8 @@ class Message(UUIDMixin, TimestampMixin, Base):
     )
     is_read: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    # Kanaldagi tashqi xabar id (delivery mapping/dedup uchun)
-    external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Kanaldagi tashqi xabar id (delivery mapping/dedup uchun).
+    # Text: Instagram `mid` 128 belgidan uzun bo'ladi (VARCHAR(128) yiqilardi).
+    external_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
