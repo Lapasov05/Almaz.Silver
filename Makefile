@@ -104,6 +104,10 @@ tg-events: ## Telegram eventlar
 test-webhooks: ## TG+IG to'liq test (config + ulanish + imzolangan POST -> ingest)
 	$(DC) exec -T api python -m app.webhook_selftest
 
+.PHONY: test-send
+test-send: ## Jonli outbound: send API javob yuboradimi (make test-send TG=<chatid> IG=<igsid>)
+	$(DC) exec -T -e TG_TO=$(TG) -e IG_TO=$(IG) api python -m app.webhook_sendtest
+
 # ==================== Instagram webhook debug ====================
 .PHONY: ig-verify ig-subscribe ig-check
 ig-verify: ## GET verify handshake'ni LOKAL sinash (verify_token DB'dan) — challenge qaytishi kerak

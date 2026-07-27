@@ -2,6 +2,8 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import structlog
+
 from app.core.exceptions import AppError, NotFoundError
 from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, strip_markdown
 from app.modules.inbox.channels.factory import build_channel_client
@@ -11,6 +13,9 @@ from app.modules.inbox.models import (
     Message,
 )
 from app.modules.inbox.repository import InboxRepository
+
+
+logger = structlog.get_logger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -128,8 +133,16 @@ class InboxService:
             result = await client.send_text(conv.customer.external_id, strip_markdown(text))
             message.delivery_status = "sent"
             message.external_id = result.external_message_id
-        except ChannelError:
+        except ChannelError as e:
+            # Yuborish yiqildi — sababни log'ga chiqaramiz (aks holда jim "failed" bo'lardi)
             message.delivery_status = "failed"
+            logger.error(
+                "outbound_send_failed",
+                channel=conv.channel,
+                conversation_id=str(conv.id),
+                recipient=conv.customer.external_id,
+                error=str(e),
+            )
         await self.repo.db.commit()
         await self.repo.db.refresh(message)
         return message
