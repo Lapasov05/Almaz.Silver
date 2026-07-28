@@ -95,14 +95,19 @@ class OrdersService:
             if product is None:
                 raise AppError("Mahsulot topilmadi")
 
-            # Zaxira tekshiruvi (faqat 'stocked' uchun; made_to_order/unique — talab qilmaydi)
-            if variant.fulfillment_type == "stocked" and variant.available < it.quantity:
-                raise AppError(
-                    f"Zaxira yetarli emas (SKU {variant.sku}): mavjud {variant.available}, so'ralgan {it.quantity}"
-                )
-
-            variant.reserved_qty += it.quantity  # TZ 10: reservation
-            unit_price = product.effective_price  # chegirma bo'lsa o'sha
+            # Zaxira maqsadlari: oddiy mahsulot -> o'zi; combo -> komponent variantlar (× combo soni)
+            targets = await self.catalog.resolve_stock_targets(variant.id, it.quantity)
+            if product.is_combo and not targets:
+                raise AppError(f"Combo bo'sh (tarkibsiz): {product.name_uz}")
+            # Tekshiruv (faqat 'stocked'); made_to_order/unique — talab qilmaydi
+            for tv, need in targets:
+                if tv.fulfillment_type == "stocked" and tv.available < need:
+                    raise AppError(
+                        f"Zaxira yetarli emas (SKU {tv.sku}): mavjud {tv.available}, kerak {need}"
+                    )
+            for tv, need in targets:
+                tv.reserved_qty += need  # TZ 10: reservation (combo -> komponentlar)
+            unit_price = product.effective_price  # combo/mahsulot narxi (chegirma bo'lsa o'sha)
 
             # --- Ism yozish (gravyurka) narxini aniqlash ---
             engraving_text = (it.engraving_text or "").strip() or None
@@ -210,11 +215,10 @@ class OrdersService:
         )
 
     async def _release_reservation(self, order: Order) -> None:
-        """Band qilingan zaxirani bo'shatadi (reserved_qty--), TZ 10. Variant + box."""
+        """Band qilingan zaxirani bo'shatadi (reserved_qty--), TZ 10. Variant/combo + box."""
         for item in order.items:
-            variant = await self.catalog.get_variant(item.variant_id)
-            if variant is not None:
-                variant.reserved_qty = max(0, variant.reserved_qty - item.quantity)
+            for tv, need in await self.catalog.resolve_stock_targets(item.variant_id, item.quantity):
+                tv.reserved_qty = max(0, tv.reserved_qty - need)
             if item.box_id is not None:
                 box = await self.catalog.get_box(item.box_id)
                 if box is not None:

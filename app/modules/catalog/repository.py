@@ -9,7 +9,9 @@ from sqlalchemy.orm import selectinload
 from app.core.pagination import PageParams, paginate
 from app.modules.catalog.models import (
     Box,
+    BoxMedia,
     Category,
+    ComboItem,
     Gender,
     Material,
     Product,
@@ -172,7 +174,9 @@ class CatalogRepository:
     # ---------- Box (kategoriyaning rangli qutisi) ----------
     async def get_box(self, box_id: uuid.UUID) -> Box | None:
         res = await self.db.execute(
-            select(Box).where(Box.id == box_id, Box.deleted_at.is_(None))
+            select(Box).options(selectinload(Box.media)).where(
+                Box.id == box_id, Box.deleted_at.is_(None)
+            )
         )
         return res.scalar_one_or_none()
 
@@ -181,12 +185,15 @@ class CatalogRepository:
         stmt = select(Box).where(Box.category_id == category_id, Box.deleted_at.is_(None))
         if only_active:
             stmt = stmt.where(Box.is_active.is_(True))
-        return await paginate(self.db, stmt, [Box.sort_order, Box.name_uz], pp)
+        return await paginate(
+            self.db, stmt, [Box.sort_order, Box.name_uz], pp, loaders=(selectinload(Box.media),)
+        )
 
     async def list_active_boxes(self, category_id: uuid.UUID) -> list[Box]:
         """Faol boxlar (AI tool / checkout uchun) — pagination'siz, tartiblangan."""
         res = await self.db.execute(
             select(Box)
+            .options(selectinload(Box.media))
             .where(
                 Box.category_id == category_id,
                 Box.deleted_at.is_(None),
@@ -195,6 +202,53 @@ class CatalogRepository:
             .order_by(Box.sort_order, Box.name_uz)
         )
         return list(res.scalars().all())
+
+    async def get_box_media(self, media_id: uuid.UUID) -> BoxMedia | None:
+        return await self.db.get(BoxMedia, media_id)
+
+    # ---------- Combo (to'plam = Product is_combo) ----------
+    async def list_combos(self, *, status: str | None, q: str | None, pp: PageParams):
+        stmt = select(Product).where(Product.is_combo.is_(True), Product.deleted_at.is_(None))
+        if status:
+            stmt = stmt.where(Product.status == status)
+        if q:
+            like = f"%{q}%"
+            stmt = stmt.where(or_(Product.name_uz.ilike(like), Product.name_ru.ilike(like)))
+        return await paginate(self.db, stmt, [Product.created_at.desc()], pp, loaders=_PRODUCT_LOADERS)
+
+    async def list_combo_items(self, combo_id: uuid.UUID) -> list[ComboItem]:
+        """Combo tarkibi — komponent variant + uning mahsuloti + rasmlari bilan."""
+        res = await self.db.execute(
+            select(ComboItem)
+            .where(ComboItem.combo_product_id == combo_id)
+            .options(
+                selectinload(ComboItem.component_variant)
+                .selectinload(Variant.product)
+                .selectinload(Product.media)
+            )
+            .order_by(ComboItem.sort_order)
+        )
+        return list(res.scalars().all())
+
+    async def get_combo_item(self, item_id: uuid.UUID) -> ComboItem | None:
+        return await self.db.get(ComboItem, item_id)
+
+    async def resolve_stock_targets(
+        self, variant_id: uuid.UUID, order_qty: int
+    ) -> list[tuple[Variant, int]]:
+        """Buyurtma order_item uchun zaxira o'zgaradigan variantlar + miqdor.
+
+        Oddiy mahsulot -> [(variant, order_qty)].
+        Combo (is_combo) -> har komponent [(component_variant, order_qty * combo_item.quantity)].
+        """
+        variant = await self.get_variant(variant_id)
+        if variant is None:
+            return []
+        product = await self.get_product(variant.product_id)
+        if product is not None and product.is_combo:
+            items = await self.list_combo_items(product.id)
+            return [(ci.component_variant, order_qty * ci.quantity) for ci in items]
+        return [(variant, order_qty)]
 
     async def get_media(self, media_id: uuid.UUID) -> ProductMedia | None:
         return await self.db.get(ProductMedia, media_id)

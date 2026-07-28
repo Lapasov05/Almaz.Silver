@@ -6,12 +6,16 @@
 - 3 qatlamli qidiruv (TZ 8).
 """
 import uuid
+from decimal import Decimal
 
 from app.core.exceptions import AppError, NotFoundError
 from app.core.pagination import PageParams
 from app.modules.catalog.models import (
     Box,
+    BoxMedia,
     Category,
+    ComboItem,
+    FulfillmentType,
     Product,
     ProductMedia,
     Variant,
@@ -19,9 +23,15 @@ from app.modules.catalog.models import (
 from app.modules.catalog.repository import REFERENCE_MODELS, CatalogRepository
 from app.modules.catalog.schemas import (
     BoxCreate,
+    BoxMediaCreate,
     BoxUpdate,
     CategoryCreate,
     CategoryUpdate,
+    ComboComponentOut,
+    ComboCreate,
+    ComboItemIn,
+    ComboOut,
+    ComboUpdate,
     MediaCreate,
     ProductCreate,
     ProductUpdate,
@@ -245,6 +255,147 @@ class CatalogService:
             raise AppError("stock_qty yoki delta ko'rsatilishi kerak")
         await self.repo.db.commit()
         return box
+
+    # ---------- Box galereya (media) ----------
+    async def add_box_media(self, box_id: uuid.UUID, data: BoxMediaCreate) -> Box:
+        box = await self.get_box(box_id)
+        box.media.append(BoxMedia(image_url=data.image_url, sort_order=data.sort_order))
+        await self.repo.db.commit()
+        return await self.get_box(box_id)
+
+    async def delete_box_media(self, media_id: uuid.UUID) -> None:
+        media = await self.repo.get_box_media(media_id)
+        if media is None:
+            raise NotFoundError("Box rasmi topilmadi")
+        await self.repo.db.delete(media)
+        await self.repo.db.commit()
+
+    # ==================== Combo (to'plam = Product is_combo) ====================
+    async def _ensure_combo_category(self) -> Category:
+        cat = await self.repo.get_category_by_slug("combo")
+        if cat is None:
+            cat = Category(name_uz="Combo", name_ru="Комбо", slug="combo")
+            await self.repo.add(cat)
+        return cat
+
+    async def _validate_combo_component(self, variant_id: uuid.UUID) -> Variant:
+        v = await self.repo.get_variant(variant_id)
+        if v is None or not v.is_active:
+            raise AppError(f"Komponent variant topilmadi yoki faol emas: {variant_id}")
+        p = await self.repo.get_product(v.product_id)
+        if p is not None and p.is_combo:
+            raise AppError("Combo ichiga combo qo'shib bo'lmaydi")
+        return v
+
+    async def create_combo(self, data: ComboCreate) -> ComboOut:
+        if data.discount_price is not None and data.discount_price > data.price:
+            raise AppError("Chegirma narx asl narxdan katta bo'lmasligi kerak")
+        # Komponentlarni oldindan tekshiramiz (combo bo'lmasin, faol bo'lsin)
+        for it in data.items:
+            await self._validate_combo_component(it.variant_id)
+
+        cat = await self._ensure_combo_category()
+        combo = Product(
+            name_uz=data.name_uz, name_ru=data.name_ru, description_uz=data.description_uz,
+            category_id=cat.id, price=data.price, discount_price=data.discount_price,
+            status=data.status, is_combo=True,
+        )
+        # Combo o'z varianti — made_to_order (o'z zaxirasi yo'q; zaxira komponentlarda)
+        combo.variants.append(Variant(
+            sku=self._generate_sku(data.name_uz),
+            fulfillment_type=FulfillmentType.made_to_order,
+        ))
+        await self.repo.add(combo)
+        await self.repo.db.flush()  # combo.id kerak
+        for i, it in enumerate(data.items):
+            self.repo.db.add(ComboItem(
+                combo_product_id=combo.id, component_variant_id=it.variant_id,
+                quantity=it.quantity, sort_order=i,
+            ))
+        await self.repo.db.commit()
+        return await self.get_combo(combo.id)
+
+    async def get_combo(self, combo_id: uuid.UUID) -> ComboOut:
+        product = await self.repo.get_product(combo_id)
+        if product is None or not product.is_combo:
+            raise NotFoundError("Combo topilmadi")
+        items = await self.repo.list_combo_items(combo_id)
+
+        comp_out: list[ComboComponentOut] = []
+        avail: list[int] = []
+        for ci in items:
+            v = ci.component_variant
+            p = v.product if v is not None else None
+            first_img = next((m.image_url for m in (p.media if p else []) if m.image_url), None)
+            comp_out.append(ComboComponentOut(
+                combo_item_id=ci.id, variant_id=v.id,
+                product_id=p.id if p else v.product_id,
+                name_uz=p.name_uz if p else "?",
+                price=(p.effective_price if p else Decimal("0")),
+                quantity=ci.quantity, available=max(v.available, 0), image_url=first_img,
+            ))
+            avail.append(max(v.available, 0) // ci.quantity if ci.quantity else 0)
+
+        combo_variant = next(
+            (vv for vv in product.variants if vv.is_active and vv.deleted_at is None), None
+        )
+        return ComboOut(
+            id=product.id, name_uz=product.name_uz, name_ru=product.name_ru,
+            description_uz=product.description_uz, price=product.effective_price,
+            old_price=(product.price if product.discount_price is not None else None),
+            status=product.status,
+            variant_id=(combo_variant.id if combo_variant else None),
+            available=(min(avail) if avail else 0),
+            items=comp_out,
+            images=[m.image_url for m in product.media if m.image_url],
+            created_at=product.created_at,
+        )
+
+    async def list_combos(self, *, status: str | None, q: str | None, pp: PageParams):
+        products, total = await self.repo.list_combos(status=status, q=q, pp=pp)
+        combos = [await self.get_combo(p.id) for p in products]
+        return combos, total
+
+    async def update_combo(self, combo_id: uuid.UUID, data: ComboUpdate) -> ComboOut:
+        product = await self.repo.get_product(combo_id)
+        if product is None or not product.is_combo:
+            raise NotFoundError("Combo topilmadi")
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(product, field, value)
+        if product.discount_price is not None and product.discount_price > product.price:
+            raise AppError("Chegirma narx asl narxdan katta bo'lmasligi kerak")
+        await self.repo.db.commit()
+        return await self.get_combo(combo_id)
+
+    async def delete_combo(self, combo_id: uuid.UUID) -> None:
+        product = await self.repo.get_product(combo_id)
+        if product is None or not product.is_combo:
+            raise NotFoundError("Combo topilmadi")
+        product.deleted_at = _utcnow()
+        for v in product.variants:
+            v.deleted_at = product.deleted_at
+        await self.repo.db.commit()
+
+    async def add_combo_item(self, combo_id: uuid.UUID, data: ComboItemIn) -> ComboOut:
+        product = await self.repo.get_product(combo_id)
+        if product is None or not product.is_combo:
+            raise NotFoundError("Combo topilmadi")
+        await self._validate_combo_component(data.variant_id)
+        # Tartibni oxiriga qo'shamiz
+        existing = await self.repo.list_combo_items(combo_id)
+        self.repo.db.add(ComboItem(
+            combo_product_id=combo_id, component_variant_id=data.variant_id,
+            quantity=data.quantity, sort_order=len(existing),
+        ))
+        await self.repo.db.commit()
+        return await self.get_combo(combo_id)
+
+    async def remove_combo_item(self, item_id: uuid.UUID) -> None:
+        item = await self.repo.get_combo_item(item_id)
+        if item is None:
+            raise NotFoundError("Combo elementi topilmadi")
+        await self.repo.db.delete(item)
+        await self.repo.db.commit()
 
     # ==================== Media ====================
     def _build_media(self, data: MediaCreate) -> ProductMedia:

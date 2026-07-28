@@ -293,6 +293,16 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             if v.deleted_at is None
         ]
         brief["boxes"] = await _boxes_for_product(db, product)  # kategoriya rangli qutilari
+        if product.is_combo:  # combo (to'plam) — ichidagi mahsulotlar
+            items = await CatalogRepository(db).list_combo_items(product.id)
+            brief["is_combo"] = True
+            brief["combo_items"] = [
+                {
+                    "name": ci.component_variant.product.name_uz if ci.component_variant.product else "?",
+                    "quantity": ci.quantity,
+                }
+                for ci in items
+            ]
         return brief
 
     if name == "list_boxes":

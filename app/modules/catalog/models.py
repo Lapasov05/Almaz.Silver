@@ -22,6 +22,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
@@ -142,6 +143,11 @@ class Product(UUIDMixin, TimestampMixin, Base):
     engraving_available: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     engraving_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
+    # --- Combo (to'plam) — is_combo=true bo'lsa bu mahsulot combo; ichi combo_item'da ---
+    # Combo o'z narxiga ega (price/discount_price), lekin O'Z zaxirasi yo'q:
+    # sotilganda ichidagi komponent variantlar zaxirasi band bo'ladi (order xizmati hal qiladi).
+    is_combo: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False, index=True)
+
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     variants: Mapped[list["Variant"]] = relationship(
@@ -226,6 +232,9 @@ class Box(UUIDMixin, TimestampMixin, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     category: Mapped["Category"] = relationship()
+    media: Mapped[list["BoxMedia"]] = relationship(
+        back_populates="box", cascade="all, delete-orphan", order_by="BoxMedia.sort_order"
+    )
 
     @property
     def available(self) -> int:
@@ -234,6 +243,44 @@ class Box(UUIDMixin, TimestampMixin, Base):
     @property
     def is_free(self) -> bool:
         return self.price == 0
+
+
+class BoxMedia(UUIDMixin, TimestampMixin, Base):
+    """Box (rangli quti) galereyasi — har box'da bir nechta rasm (URL, /files upload'dan)."""
+
+    __tablename__ = "box_media"
+
+    box_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("box.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    image_url: Mapped[str] = mapped_column(String(500), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+
+    box: Mapped["Box"] = relationship(back_populates="media")
+
+
+class ComboItem(UUIDMixin, TimestampMixin, Base):
+    """Combo tarkibi — combo (Product is_combo) ichidagi bitta komponent variant + soni.
+
+    `component_variant_id` orqali zaxira band qilinadi (variant -> product -> media rasmi).
+    """
+
+    __tablename__ = "combo_item"
+    __table_args__ = (
+        UniqueConstraint("combo_product_id", "component_variant_id", name="uq_combo_item"),
+    )
+
+    combo_product_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("product.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    component_variant_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("variant.id", ondelete="RESTRICT"), nullable=False
+    )
+    quantity: Mapped[int] = mapped_column(Integer, server_default="1", nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+
+    combo: Mapped["Product"] = relationship(foreign_keys=[combo_product_id])
+    component_variant: Mapped["Variant"] = relationship(foreign_keys=[component_variant_id])
 
 
 class ProductMedia(UUIDMixin, TimestampMixin, Base):

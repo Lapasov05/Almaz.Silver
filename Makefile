@@ -56,8 +56,10 @@ seed: ## Asosiy seed (rol/permission/settings/admin)
 	$(DC) exec -T api python -m app.seed
 demo-seed: ## Demo ma'lumot (12 mahsulot, 7 buyurtma, ...)
 	$(DC) exec -T api python -m app.demo_seed
-demo-boxes: ## Demo box ranglari (mavjud kategoriyalarga 6 rang: 2 tekin + 4 pulli)
+demo-boxes: ## Demo box ranglari + rasm (mavjud kategoriyalarga 6 rang: 2 tekin + 4 pulli)
 	$(DC) exec -T api python -m app.demo_boxes
+demo-combos: ## Demo combolar (mavjud mahsulotlardan turli kategoriya to'plamlari)
+	$(DC) exec -T api python -m app.demo_combos
 seed-integrations: ## Integration config qatorlarini yaratish (placeholder)
 	$(DC) exec -T api python -m app.seed_integrations
 shell: ## API konteyner ichiga bash

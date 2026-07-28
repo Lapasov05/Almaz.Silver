@@ -15,7 +15,7 @@ import app.core.models_registry  # noqa: F401 — barcha model
 from sqlalchemy import func, select
 
 from app.core.database import SessionLocal
-from app.modules.catalog.models import Box, Category
+from app.modules.catalog.models import Box, BoxMedia, Category
 from app.modules.settings.models import Setting
 
 # (rang nomi, hex, narx, count) — 2 tekin (0) + 4 pulli
@@ -59,14 +59,20 @@ async def main() -> None:
                 skipped += 1
                 continue
             for i, (name, hex_, price, stock) in enumerate(DEMO_COLORS):
-                db.add(Box(
+                box = Box(
                     category_id=cat.id,
                     name_uz=name,
                     color_hex=hex_,
                     price=Decimal(price),
                     stock_qty=stock,
                     sort_order=i,
+                )
+                # Demo galereya rasmi (placeholder — rangga mos)
+                box.media.append(BoxMedia(
+                    image_url=f"https://placehold.co/600x600/{hex_.lstrip('#')}/ffffff.png",
+                    sort_order=0,
                 ))
+                db.add(box)
                 boxes_added += 1
             filled += 1
 

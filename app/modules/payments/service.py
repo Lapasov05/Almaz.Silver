@@ -97,12 +97,11 @@ class PaymentService:
         payment.reviewed_by = reviewer_id
         payment.reviewed_at = _utcnow()
 
-        # TZ 10: approved → stock_qty--, reserved_qty-- (variant + box)
+        # TZ 10: approved → stock_qty--, reserved_qty-- (variant/combo komponentlar + box)
         for item in order.items:
-            variant = await self.catalog.get_variant(item.variant_id)
-            if variant is not None:
-                variant.stock_qty = max(0, variant.stock_qty - item.quantity)
-                variant.reserved_qty = max(0, variant.reserved_qty - item.quantity)
+            for tv, need in await self.catalog.resolve_stock_targets(item.variant_id, item.quantity):
+                tv.stock_qty = max(0, tv.stock_qty - need)
+                tv.reserved_qty = max(0, tv.reserved_qty - need)
             if item.box_id is not None:
                 box = await self.catalog.get_box(item.box_id)
                 if box is not None:
@@ -139,13 +138,12 @@ class PaymentService:
         payment.reviewed_by = reviewer_id
         payment.reviewed_at = _utcnow()
 
-        # TZ 10: to'lov rejected → reserved_qty-- (band bo'shaydi; variant + box)
+        # TZ 10: to'lov rejected → reserved_qty-- (band bo'shaydi; variant/combo + box)
         order = await self.orders.get(payment.order_id)
         if order is not None:
             for item in order.items:
-                variant = await self.catalog.get_variant(item.variant_id)
-                if variant is not None:
-                    variant.reserved_qty = max(0, variant.reserved_qty - item.quantity)
+                for tv, need in await self.catalog.resolve_stock_targets(item.variant_id, item.quantity):
+                    tv.reserved_qty = max(0, tv.reserved_qty - need)
                 if item.box_id is not None:
                     box = await self.catalog.get_box(item.box_id)
                     if box is not None:

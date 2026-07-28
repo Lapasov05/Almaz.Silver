@@ -105,6 +105,19 @@ class BoxUpdate(BaseModel):
     sort_order: int | None = None
 
 
+class BoxMediaCreate(BaseModel):
+    image_url: str = Field(min_length=1, max_length=500)  # /files upload'dan qaytgan URL
+    sort_order: int = 0
+
+
+class BoxMediaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    image_url: str
+    sort_order: int
+
+
 class BoxOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -120,6 +133,58 @@ class BoxOut(BaseModel):
     available: int
     is_active: bool
     sort_order: int
+    media: list[BoxMediaOut] = []  # galereya (rasm URL'lari)
+    created_at: datetime
+
+
+# ---------- Combo (to'plam = maxsus Product) ----------
+class ComboItemIn(BaseModel):
+    variant_id: uuid.UUID                    # komponent variant (odatda mahsulotning default varianti)
+    quantity: int = Field(default=1, ge=1)
+
+
+class ComboCreate(BaseModel):
+    name_uz: str = Field(min_length=1, max_length=255)
+    name_ru: str | None = Field(default=None, max_length=255)
+    description_uz: str | None = None
+    price: Decimal = Field(ge=0)                       # combo o'z narxi (qo'lda)
+    discount_price: Decimal | None = Field(default=None, ge=0)
+    status: ProductStatus = ProductStatus.draft
+    items: list[ComboItemIn] = Field(min_length=1)     # kamida 1 komponent
+
+
+class ComboUpdate(BaseModel):
+    name_uz: str | None = Field(default=None, max_length=255)
+    name_ru: str | None = Field(default=None, max_length=255)
+    description_uz: str | None = None
+    price: Decimal | None = Field(default=None, ge=0)
+    discount_price: Decimal | None = Field(default=None, ge=0)
+    status: ProductStatus | None = None
+
+
+class ComboComponentOut(BaseModel):
+    combo_item_id: uuid.UUID
+    variant_id: uuid.UUID
+    product_id: uuid.UUID
+    name_uz: str
+    price: Decimal            # komponent effective_price (faqat ko'rsatish)
+    quantity: int
+    available: int            # komponent mavjud zaxirasi
+    image_url: str | None     # komponent birinchi rasmi
+
+
+class ComboOut(BaseModel):
+    id: uuid.UUID             # combo product id
+    name_uz: str
+    name_ru: str | None
+    description_uz: str | None
+    price: Decimal            # combo narxi (chegirma bo'lsa o'sha)
+    old_price: Decimal | None
+    status: ProductStatus
+    variant_id: uuid.UUID | None  # buyurtma uchun combo varianti
+    available: int            # min(komponent.available // quantity)
+    items: list[ComboComponentOut]
+    images: list[str] = []    # combo o'z galereyasi (product_media URL'lari)
     created_at: datetime
 
 

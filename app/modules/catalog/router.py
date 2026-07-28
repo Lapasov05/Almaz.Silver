@@ -14,11 +14,16 @@ from app.core.pagination import Page, PageParams, page_params, page_params_ref
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.catalog.schemas import (
     BoxCreate,
+    BoxMediaCreate,
     BoxOut,
     BoxUpdate,
     CategoryCreate,
     CategoryOut,
     CategoryUpdate,
+    ComboCreate,
+    ComboItemIn,
+    ComboOut,
+    ComboUpdate,
     MediaCreate,
     MediaOut,
     ProductCreate,
@@ -145,6 +150,58 @@ async def delete_box(box_id: uuid.UUID, service: CatalogService = Depends(svc)):
 @router.post("/boxes/{box_id}/stock", response_model=BoxOut, dependencies=[_UPDATE])
 async def adjust_box_stock(box_id: uuid.UUID, payload: StockAdjust, service: CatalogService = Depends(svc)):
     return BoxOut.model_validate(await service.adjust_box_stock(box_id, payload))
+
+
+@router.post("/boxes/{box_id}/media", response_model=BoxOut, dependencies=[_UPDATE])
+async def add_box_media(box_id: uuid.UUID, payload: BoxMediaCreate, service: CatalogService = Depends(svc)):
+    return BoxOut.model_validate(await service.add_box_media(box_id, payload))
+
+
+@router.delete("/boxes/media/{media_id}", status_code=204, dependencies=[_UPDATE])
+async def delete_box_media(media_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    await service.delete_box_media(media_id)
+
+
+# ==================== Combo (to'plam = maxsus Product) ====================
+@router.post("/combos", response_model=ComboOut, dependencies=[_CREATE])
+async def create_combo(payload: ComboCreate, service: CatalogService = Depends(svc)):
+    return await service.create_combo(payload)
+
+
+@router.get("/combos", response_model=Page[ComboOut], dependencies=[_VIEW])
+async def list_combos(
+    status: ProductStatus | None = None,
+    q: str | None = None,
+    pp: PageParams = Depends(page_params),
+    service: CatalogService = Depends(svc),
+):
+    items, total = await service.list_combos(status=status.value if status else None, q=q, pp=pp)
+    return Page[ComboOut](items=items, total=total, limit=pp.limit, offset=pp.offset)
+
+
+@router.get("/combos/{combo_id}", response_model=ComboOut, dependencies=[_VIEW])
+async def get_combo(combo_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    return await service.get_combo(combo_id)
+
+
+@router.patch("/combos/{combo_id}", response_model=ComboOut, dependencies=[_UPDATE])
+async def update_combo(combo_id: uuid.UUID, payload: ComboUpdate, service: CatalogService = Depends(svc)):
+    return await service.update_combo(combo_id, payload)
+
+
+@router.delete("/combos/{combo_id}", status_code=204, dependencies=[_DELETE])
+async def delete_combo(combo_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    await service.delete_combo(combo_id)
+
+
+@router.post("/combos/{combo_id}/items", response_model=ComboOut, dependencies=[_UPDATE])
+async def add_combo_item(combo_id: uuid.UUID, payload: ComboItemIn, service: CatalogService = Depends(svc)):
+    return await service.add_combo_item(combo_id, payload)
+
+
+@router.delete("/combos/items/{item_id}", status_code=204, dependencies=[_UPDATE])
+async def remove_combo_item(item_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    await service.remove_combo_item(item_id)
 
 
 # ==================== Products ====================
