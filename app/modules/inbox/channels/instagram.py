@@ -89,6 +89,23 @@ class InstagramClient:
             raise ChannelError(f"Instagram send xato: {resp.status_code} {resp.text[:200]}")
         return SendResult(external_message_id=resp.json().get("message_id"))
 
+    async def send_image(self, recipient_id: str, image_url: str, caption: str | None = None) -> SendResult:
+        """Rasm attachment yuboradi (IG /me/messages). Caption alohida matn sifatida oldin ketadi."""
+        if not self._token:
+            raise ChannelError("Instagram access_token sozlanmagan")
+        url = f"{self._base}/{self._version}/{self._sender}/messages"
+        # IG bitta xabarda rasm+matnni birga qo'llamaydi — caption bo'lsa avval matn yuboriladi
+        async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+            if caption:
+                await client.post(url, params={"access_token": self._token},
+                                  json={"recipient": {"id": recipient_id}, "message": {"text": caption}})
+            body = {"recipient": {"id": recipient_id},
+                    "message": {"attachment": {"type": "image", "payload": {"url": image_url}}}}
+            resp = await client.post(url, params={"access_token": self._token}, json=body)
+        if resp.status_code >= 400:
+            raise ChannelError(f"Instagram rasm yuborish xato: {resp.status_code} {resp.text[:200]}")
+        return SendResult(external_message_id=resp.json().get("message_id"))
+
     async def send_typing(self, recipient_id: str) -> None:
         """sender_action=typing_on — "yozyapti..." (best-effort)."""
         if not self._token:

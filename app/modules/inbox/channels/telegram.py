@@ -79,6 +79,21 @@ class TelegramClient:
         result = resp.json().get("result", {})
         return SendResult(external_message_id=str(result.get("message_id")) if result.get("message_id") else None)
 
+    async def send_image(self, recipient_id: str, image_url: str, caption: str | None = None) -> SendResult:
+        """sendPhoto — rasm (URL) + ixtiyoriy caption."""
+        if not self._token:
+            raise ChannelError("TELEGRAM_BOT_TOKEN sozlanmagan")
+        payload: dict = {"chat_id": recipient_id, "photo": image_url}
+        if caption:
+            payload["caption"] = caption[:1024]  # Telegram caption limiti
+        url = f"{self._base}/bot{self._token}/sendPhoto"
+        async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+            resp = await client.post(url, json=payload)
+        if resp.status_code != 200 or not resp.json().get("ok"):
+            raise ChannelError(f"Telegram sendPhoto xato: {resp.status_code} {resp.text[:200]}")
+        result = resp.json().get("result", {})
+        return SendResult(external_message_id=str(result.get("message_id")) if result.get("message_id") else None)
+
     async def send_typing(self, recipient_id: str) -> None:
         """sendChatAction(typing) — "yozyapti..." (best-effort, ~5s ko'rinadi)."""
         if not self._token:

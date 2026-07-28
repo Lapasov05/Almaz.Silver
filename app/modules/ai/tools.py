@@ -190,6 +190,27 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "send_product_images",
+            "description": (
+                "Tavsiya qilinayotgan mahsulot(lar) RASMLARINI mijozga yuboradi — mijoz nom bilan "
+                "tanimasligi mumkin, rasm bilan aniq tanlaydi. Mahsulotni tavsiya qilganda/gapirganda "
+                "ishlating. Har mahsulotning 1-rasmi yuboriladi (rasmi bo'lganlarniki)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product_ids": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "Rasm yuboriladigan mahsulot id'lari (search/recommend natijasidan)",
+                    }
+                },
+                "required": ["product_ids"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "resolve_instagram_media",
             "description": (
                 "Instagram post/story linkidan yoki story javobidan mahsulotni topadi (bazadan). "
@@ -234,6 +255,8 @@ def _product_brief(product: Product, engraving: tuple[bool, Decimal] | None = No
         "available": available,
         "default_variant_id": str(default_variant.id) if default_variant else None,
         "shortcodes": [m.shortcode for m in product.media if m.shortcode],
+        # Rasm URL'lari — AI mijozga rasm yuborishi uchun (send_product_images)
+        "images": [m.image_url for m in product.media if m.image_url][:5],
     }
     # Ism yozish (gravyurka) — AI mijozga taklif qilishi uchun amaldagi narx
     if engraving is not None:
@@ -325,6 +348,29 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         if product is None:
             return {"boxes": [], "error": "mahsulot topilmadi"}
         return {"boxes": await _boxes_for_product(db, product)}
+
+    if name == "send_product_images":
+        from app.modules.inbox.repository import InboxRepository
+        from app.modules.inbox.service import InboxService
+
+        inbox = InboxService(InboxRepository(db))
+        sent, skipped = 0, 0
+        for pid in (args.get("product_ids") or [])[:8]:
+            try:
+                product = await CatalogRepository(db).get_product(uuid.UUID(pid))
+            except (ValueError, TypeError):
+                product = None
+            if product is None:
+                skipped += 1
+                continue
+            img = next((m.image_url for m in product.media if m.image_url), None)
+            if not img:
+                skipped += 1  # rasmi yo'q — yuborilmaydi
+                continue
+            caption = f"{product.name_uz} — {int(product.effective_price)} so'm"
+            await inbox.send_media(ctx.conversation, img, caption=caption)
+            sent += 1
+        return {"sent": sent, "skipped_no_image": skipped}
 
     if name == "resolve_instagram_media":
         product = await catalog.resolve_instagram_media(args.get("link_or_ref", ""))

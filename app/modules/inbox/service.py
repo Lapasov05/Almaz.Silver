@@ -172,6 +172,35 @@ class InboxService:
         except Exception:  # noqa: BLE001 — indikator muhim emas
             logger.debug("typing indikatori yuborilmadi (conv=%s)", conv.id, exc_info=True)
 
+    async def send_media(self, conv: Conversation, image_url: str, caption: str | None = None) -> Message:
+        """AI mahsulot rasmini yuboradi — chiquvchi xabar sifatida saqlanadi (delivery_status bilan)."""
+        conv.last_message = caption or "[rasm]"
+        conv.last_activity_at = _utcnow()
+        message = Message(
+            conversation_id=conv.id,
+            direction="outgoing",
+            sender_type="ai",
+            content=caption,
+            attachments=[{"type": "image", "url": image_url}],
+            delivery_status="pending",
+        )
+        await self.repo.add(message)
+        await self.repo.db.commit()
+        try:
+            client = await build_channel_client(self.repo.db, conv.channel)
+            result = await client.send_image(conv.customer.external_id, image_url, caption=caption)
+            message.delivery_status = "sent"
+            message.external_id = result.external_message_id
+        except ChannelError as e:
+            message.delivery_status = "failed"
+            logger.error(
+                "outbound_image_failed",
+                channel=conv.channel, conversation_id=str(conv.id), error=str(e),
+            )
+        await self.repo.db.commit()
+        await self.repo.db.refresh(message)
+        return message
+
     # ---------- Tizim xabari (to'lov tasdiq/rad va h.k.) ----------
     async def notify_customer(self, customer_id: uuid.UUID, channel: str, text: str) -> Message | None:
         """Mijozning ochiq suhbatiga tizim xabarini yuboradi (suhbat bo'lmasa None)."""
