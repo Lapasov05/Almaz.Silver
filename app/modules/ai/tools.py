@@ -323,7 +323,9 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         }
 
     if name == "recommend":
-        products = await catalog.list_products(status="active", limit=5)
+        from app.core.pagination import PageParams
+
+        products, _ = await catalog.list_products(pp=PageParams(limit=5, offset=0), status="active")
         eng = await _engraving_settings(db)
         return {"products": [_product_brief(p, eng) for p in products]}
 
