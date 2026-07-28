@@ -128,6 +128,11 @@ class CatalogService:
     async def create_product(self, data: ProductCreate) -> Product:
         if data.discount_price is not None and data.discount_price > data.price:
             raise AppError("Chegirma narx asl narxdan katta bo'lmasligi kerak")
+        # Rasm MAJBURIY — mijoz mahsulotni rasm bilan tanidi (AI rasm yuboradi).
+        # Kamida bitta to'g'ridan-to'g'ri rasm URL: image_urls yoki media.image_url.
+        has_image = bool(data.image_urls) or any(m.image_url for m in (data.media or []))
+        if not has_image:
+            raise AppError("Mahsulot uchun kamida bitta rasm majburiy (image_urls yoki media rasm URL)")
         product = Product(
             name_uz=data.name_uz, name_ru=data.name_ru,
             description_uz=data.description_uz, description_ru=data.description_ru,
