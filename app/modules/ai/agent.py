@@ -45,6 +45,43 @@ async def _setting(db, key: str, default: Any) -> Any:
     return setting.value if setting is not None else default
 
 
+async def _instagram_context(db, conv) -> str | None:
+    """Oxirgi kiruvchi xabar IG link/story-javob bo'lsa — mahsulotni topib AI'ga kontekst beradi."""
+    from sqlalchemy import select
+
+    from app.modules.catalog.repository import CatalogRepository
+    from app.modules.catalog.search import is_instagram_url
+    from app.modules.catalog.service import CatalogService
+    from app.modules.inbox.models import Message
+
+    latest = (await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conv.id, Message.direction == "incoming")
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if latest is None:
+        return None
+    ref = None
+    for att in (latest.attachments or []):
+        if isinstance(att, dict) and att.get("type") == "ig_story" and att.get("story_ref"):
+            ref = att["story_ref"]
+            break
+    if ref is None and latest.content and is_instagram_url(latest.content):
+        ref = latest.content
+    if ref is None:
+        return None
+    product = await CatalogService(CatalogRepository(db)).resolve_instagram_media(ref)
+    if product is None:
+        return ("[Instagram: mijoz post/story yubordi, lekin bazadan mahsulot topilmadi. "
+                "Mijozdan qaysi mahsulot ekanini so'ra yoki tavsif bo'yicha qidir.]")
+    avail = product.available
+    tip = ("Shu mahsulot bo'yicha savdoni davom ettir (o'lcham/zaxira/narx)." if avail > 0
+           else "Zaxirada yo'q - mijozga muloyim ayt va o'xshash mahsulot taklif qil (recommend).")
+    return (f"[Instagram konteksti: mijoz '{product.name_uz}' mahsulotini ko'rdi. "
+            f"Narx: {product.effective_price}. Zaxira: {avail}. {tip}]")
+
+
 class Agent:
     def __init__(self, db, provider: LLMProvider | None):
         self.db = db
@@ -105,6 +142,10 @@ class Agent:
             messages = await memory_mod.build_messages(
                 self.db, conv, conv.customer, system_prompt, settings.ai_memory_message_count
             )
+            # Instagram post/story konteksti (mijoz link/story-javob yuborgan bo'lsa) — grounding
+            ig_ctx = await _instagram_context(self.db, conv)
+            if ig_ctx:
+                messages.insert(1, LlmMessage(role="system", content=ig_ctx))
             model = str(
                 await _setting(self.db, "llm_model", settings.ai_default_model) or settings.ai_default_model
             )

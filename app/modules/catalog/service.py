@@ -6,6 +6,7 @@
 - 3 qatlamli qidiruv (TZ 8).
 """
 import uuid
+from datetime import timedelta
 from decimal import Decimal
 
 from app.core.exceptions import AppError, NotFoundError
@@ -16,6 +17,7 @@ from app.modules.catalog.models import (
     Category,
     ComboItem,
     FulfillmentType,
+    MediaChannel,
     Product,
     ProductMedia,
     Variant,
@@ -32,6 +34,8 @@ from app.modules.catalog.schemas import (
     ComboItemIn,
     ComboOut,
     ComboUpdate,
+    InstagramMediaCreate,
+    InstagramMediaUpdate,
     MediaCreate,
     ProductCreate,
     ProductUpdate,
@@ -42,7 +46,12 @@ from app.modules.catalog.schemas import (
     VariantUpdate,
 )
 from app.modules.settings.repository import SettingsRepository
-from app.modules.catalog.search import extract_shortcode, is_instagram_url, slugify
+from app.modules.catalog.search import (
+    extract_instagram_ref,
+    extract_shortcode,
+    is_instagram_url,
+    slugify,
+)
 
 
 class CatalogService:
@@ -396,6 +405,72 @@ class CatalogService:
             raise NotFoundError("Combo elementi topilmadi")
         await self.repo.db.delete(item)
         await self.repo.db.commit()
+
+    # ==================== Instagram media (post/story link -> mahsulot) ====================
+    async def add_instagram_media(self, product_id: uuid.UUID, data: InstagramMediaCreate) -> ProductMedia:
+        product = await self.get_product(product_id)  # 404 agar yo'q
+        ref = extract_instagram_ref(data.link)
+        if ref is None:
+            raise AppError("Instagram post yoki story linki noto'g'ri (masalan .../p/... yoki .../stories/...)")
+        media_type, value = ref
+        pm = ProductMedia(
+            product_id=product.id,
+            channel=MediaChannel.instagram,
+            media_type=media_type,
+            permalink=data.link,
+            image_url=data.image_url,
+        )
+        if media_type == "story":
+            pm.story_ref = value
+            pm.expires_at = _utcnow() + timedelta(hours=24)  # story 24 soat turadi
+        else:  # post / reel
+            pm.shortcode = value
+        self.repo.db.add(pm)
+        await self.repo.db.commit()
+        await self.repo.db.refresh(pm)
+        return pm
+
+    async def list_instagram_media(self, product_id: uuid.UUID) -> list[ProductMedia]:
+        await self.get_product(product_id)
+        return await self.repo.list_product_ig_media(product_id)
+
+    async def update_instagram_media(self, media_id: uuid.UUID, data: InstagramMediaUpdate) -> ProductMedia:
+        media = await self.repo.get_media(media_id)
+        if media is None:
+            raise NotFoundError("Instagram media topilmadi")
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(media, field, value)
+        await self.repo.db.commit()
+        await self.repo.db.refresh(media)
+        return media
+
+    async def delete_instagram_media(self, media_id: uuid.UUID) -> None:
+        media = await self.repo.get_media(media_id)
+        if media is None:
+            raise NotFoundError("Instagram media topilmadi")
+        await self.repo.db.delete(media)
+        await self.repo.db.commit()
+
+    async def resolve_instagram_media(self, link_or_ref: str) -> Product | None:
+        """Link yoki ref (post/story) bo'yicha mahsulotni topadi (AI tool uchun)."""
+        if not link_or_ref:
+            return None
+        ref = extract_instagram_ref(link_or_ref)
+        if ref is not None:
+            media_type, value = ref
+            if media_type == "story":
+                return await self.repo.get_product_by_story_ref(value)
+            # 'post' deb ajratilgan — lekin toza raqam story_ref ham bo'lishi mumkin (fallback)
+            return (
+                await self.repo.get_product_by_shortcode(value)
+                or await self.repo.get_product_by_story_ref(value)
+            )
+        # Umuman ajralmadi — ikkalasini sinaymiz
+        val = link_or_ref.strip()
+        return (
+            await self.repo.get_product_by_shortcode(val)
+            or await self.repo.get_product_by_story_ref(val)
+        )
 
     # ==================== Media ====================
     def _build_media(self, data: MediaCreate) -> ProductMedia:

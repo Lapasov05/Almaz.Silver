@@ -1,5 +1,6 @@
 """catalog Repository qatlami — DB kirish + filtrlangan pagination (TZ 6.3 / 8)."""
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from sqlalchemy import func, or_, select
@@ -260,6 +261,33 @@ class CatalogRepository:
             .where(ProductMedia.shortcode == shortcode, Product.deleted_at.is_(None))
         )
         return res.scalars().first()
+
+    async def get_product_by_story_ref(self, story_ref: str) -> Product | None:
+        """Story_ref bo'yicha mahsulot — faol + muddati o'tmagan story."""
+        now = datetime.now(timezone.utc)
+        res = await self.db.execute(
+            select(Product).options(*_PRODUCT_LOADERS)
+            .join(ProductMedia, ProductMedia.product_id == Product.id)
+            .where(
+                ProductMedia.story_ref == story_ref,
+                ProductMedia.is_active.is_(True),
+                (ProductMedia.expires_at.is_(None)) | (ProductMedia.expires_at > now),
+                Product.deleted_at.is_(None),
+            )
+        )
+        return res.scalars().first()
+
+    async def list_product_ig_media(self, product_id: uuid.UUID) -> list[ProductMedia]:
+        """Mahsulotning IG media (post/reel/story) ro'yxati — admin bo'lim."""
+        res = await self.db.execute(
+            select(ProductMedia)
+            .where(
+                ProductMedia.product_id == product_id,
+                ProductMedia.media_type.in_(("post", "reel", "story")),
+            )
+            .order_by(ProductMedia.created_at.desc())
+        )
+        return list(res.scalars().all())
 
     # ---------- Search ----------
     async def search_text(self, query: str, limit: int) -> list[tuple[Product, float]]:

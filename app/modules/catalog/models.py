@@ -298,4 +298,20 @@ class ProductMedia(UUIDMixin, TimestampMixin, Base):
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536), nullable=True)
 
+    # --- Instagram media turi (post/reel/story/image) va story bog'lash ---
+    # media_type: image (oddiy rasm) | post | reel | story
+    media_type: Mapped[str] = mapped_column(String(20), server_default="image", nullable=False)
+    # story_ref: IG story media_id — webhook `reply_to.story.id` bilan mos (story uchun)
+    story_ref: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
+    # expires_at: story 24 soat turadi (post/reel/image = NULL, doimiy)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+
     product: Mapped["Product"] = relationship(back_populates="media")
+
+    @property
+    def is_expired(self) -> bool:
+        """Story muddati o'tганmi (expires_at bo'lsa va o'tган bo'lsa)."""
+        from datetime import timezone as _tz
+
+        return self.expires_at is not None and self.expires_at < datetime.now(_tz.utc)

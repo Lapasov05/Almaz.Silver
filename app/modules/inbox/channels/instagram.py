@@ -50,6 +50,12 @@ def parse_payload(payload: dict) -> list[NormalizedIncoming]:
                 {"type": att.get("type"), "url": (att.get("payload") or {}).get("url")}
                 for att in message.get("attachments", [])
             ]
+            # Story javobi: mijoz bizning story'ga javob berdi -> story media_id (mahsulotga bog'lash uchun)
+            story = (message.get("reply_to") or {}).get("story") or {}
+            if story.get("id"):
+                attachments.append(
+                    {"type": "ig_story", "story_ref": str(story["id"]), "url": story.get("url")}
+                )
             results.append(
                 NormalizedIncoming(
                     channel="instagram",

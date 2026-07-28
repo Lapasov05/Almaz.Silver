@@ -60,6 +60,8 @@ demo-boxes: ## Demo box ranglari + rasm (mavjud kategoriyalarga 6 rang: 2 tekin 
 	$(DC) exec -T api python -m app.demo_boxes
 demo-combos: ## Demo combolar (mavjud mahsulotlardan turli kategoriya to'plamlari)
 	$(DC) exec -T api python -m app.demo_combos
+demo-instagram: ## Demo IG media (mahsulotlarga post+story link)
+	$(DC) exec -T api python -m app.demo_instagram
 seed-integrations: ## Integration config qatorlarini yaratish (placeholder)
 	$(DC) exec -T api python -m app.seed_integrations
 shell: ## API konteyner ichiga bash

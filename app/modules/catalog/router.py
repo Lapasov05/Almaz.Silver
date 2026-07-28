@@ -24,6 +24,9 @@ from app.modules.catalog.schemas import (
     ComboItemIn,
     ComboOut,
     ComboUpdate,
+    InstagramMediaCreate,
+    InstagramMediaOut,
+    InstagramMediaUpdate,
     MediaCreate,
     MediaOut,
     ProductCreate,
@@ -202,6 +205,32 @@ async def add_combo_item(combo_id: uuid.UUID, payload: ComboItemIn, service: Cat
 @router.delete("/combos/items/{item_id}", status_code=204, dependencies=[_UPDATE])
 async def remove_combo_item(item_id: uuid.UUID, service: CatalogService = Depends(svc)):
     await service.remove_combo_item(item_id)
+
+
+# ==================== Instagram media (post/story link -> mahsulot) ====================
+@router.post("/products/{product_id}/instagram", response_model=InstagramMediaOut, dependencies=[_UPDATE])
+async def add_instagram_media(
+    product_id: uuid.UUID, payload: InstagramMediaCreate, service: CatalogService = Depends(svc)
+):
+    return InstagramMediaOut.model_validate(await service.add_instagram_media(product_id, payload))
+
+
+@router.get("/products/{product_id}/instagram", response_model=list[InstagramMediaOut], dependencies=[_VIEW])
+async def list_instagram_media(product_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    items = await service.list_instagram_media(product_id)
+    return [InstagramMediaOut.model_validate(m) for m in items]
+
+
+@router.patch("/instagram-media/{media_id}", response_model=InstagramMediaOut, dependencies=[_UPDATE])
+async def update_instagram_media(
+    media_id: uuid.UUID, payload: InstagramMediaUpdate, service: CatalogService = Depends(svc)
+):
+    return InstagramMediaOut.model_validate(await service.update_instagram_media(media_id, payload))
+
+
+@router.delete("/instagram-media/{media_id}", status_code=204, dependencies=[_DELETE])
+async def delete_instagram_media(media_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    await service.delete_instagram_media(media_id)
 
 
 # ==================== Products ====================

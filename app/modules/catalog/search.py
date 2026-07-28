@@ -7,8 +7,34 @@ import unicodedata
 _SHORTCODE_RE = re.compile(
     r"instagram\.com/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", re.IGNORECASE
 )
+# Instagram story URL: instagram.com/stories/<username>/<media_id>/ -> media_id (raqam)
+_STORY_RE = re.compile(r"instagram\.com/stories/[^/]+/(\d+)", re.IGNORECASE)
 
 _SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
+
+
+def extract_story_ref(value: str) -> str | None:
+    """IG story URL'dan media_id (story_ref) qaytaradi; mos kelmasa None."""
+    if not value:
+        return None
+    m = _STORY_RE.search(value)
+    return m.group(1) if m else None
+
+
+def extract_instagram_ref(value: str) -> tuple[str, str] | None:
+    """Linkdan (media_type, ref): post/reel -> ('post', shortcode); story -> ('story', media_id).
+
+    Mos kelmasa None. Story avval tekshiriladi (URL formati aniqroq).
+    """
+    if not value:
+        return None
+    story = extract_story_ref(value)
+    if story:
+        return ("story", story)
+    sc = extract_shortcode(value)
+    if sc:
+        return ("post", sc)
+    return None
 
 
 def extract_shortcode(value: str) -> str | None:

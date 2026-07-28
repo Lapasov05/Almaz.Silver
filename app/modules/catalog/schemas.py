@@ -223,6 +223,33 @@ class MediaOut(BaseModel):
     image_url: str | None
 
 
+# ---------- Instagram media (post/story link -> mahsulot) ----------
+class InstagramMediaCreate(BaseModel):
+    link: str = Field(min_length=1, max_length=500)              # IG post yoki story link
+    image_url: str | None = Field(default=None, max_length=500)  # ixtiyoriy thumbnail (/files upload)
+
+
+class InstagramMediaUpdate(BaseModel):
+    is_active: bool | None = None
+    image_url: str | None = Field(default=None, max_length=500)
+
+
+class InstagramMediaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    product_id: uuid.UUID
+    media_type: str            # post | reel | story
+    shortcode: str | None
+    story_ref: str | None
+    permalink: str | None
+    image_url: str | None
+    is_active: bool
+    is_expired: bool           # story muddati o'tganmi
+    expires_at: datetime | None
+    created_at: datetime
+
+
 # ---------- Product ----------
 class ProductCreate(BaseModel):
     name_uz: str = Field(min_length=1, max_length=255)

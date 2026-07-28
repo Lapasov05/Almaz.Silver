@@ -190,6 +190,21 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "resolve_instagram_media",
+            "description": (
+                "Instagram post/story linkidan yoki story javobidan mahsulotni topadi (bazadan). "
+                "Mijoz IG link tashlasa yoki story'ga javob bersa ishlatiladi. found=false bo'lsa mijozdan so'ra."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"link_or_ref": {"type": "string", "description": "IG post/story link yoki story_ref"}},
+                "required": ["link_or_ref"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "handoff_to_operator",
             "description": "Suhbatni jonli operatorga o'tkazish (o'zi hal qila olmaganda).",
             "parameters": {
@@ -310,6 +325,15 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         if product is None:
             return {"boxes": [], "error": "mahsulot topilmadi"}
         return {"boxes": await _boxes_for_product(db, product)}
+
+    if name == "resolve_instagram_media":
+        product = await catalog.resolve_instagram_media(args.get("link_or_ref", ""))
+        if product is None:
+            return {"found": False}
+        brief = _product_brief(product, await _engraving_settings(db))
+        brief["found"] = True
+        brief["boxes"] = await _boxes_for_product(db, product)
+        return brief
 
     if name == "check_stock":
         variant = await CatalogRepository(db).get_variant(uuid.UUID(args["variant_id"]))
