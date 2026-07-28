@@ -29,8 +29,8 @@ async def create_checkout_link(
     order_id: uuid.UUID, service: DeliveryService = Depends(get_delivery_service)
 ) -> CheckoutLinkOut:
     """Buyurtma uchun bir martalik checkout link generatsiya qiladi (TZ 11)."""
-    url, expires_at = await service.create_checkout_link(order_id)
-    return CheckoutLinkOut(url=url, expires_at=expires_at)
+    url, token, expires_at = await service.create_checkout_link(order_id)
+    return CheckoutLinkOut(url=url, token=token, expires_at=expires_at)
 
 
 @router.get(

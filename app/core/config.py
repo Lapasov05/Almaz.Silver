@@ -56,7 +56,13 @@ class Settings(BaseSettings):
     http_timeout_seconds: float = 10.0
 
     # --- Checkout / lokatsiya (TZ 11) ---
-    public_base_url: str = "http://localhost:8000"  # checkout link uchun tashqi bazaviy URL
+    public_base_url: str = "http://localhost:8000"  # checkout link uchun tashqi bazaviy URL (frontend domeni)
+    checkout_path: str = "/checkout"                 # link: {public_base_url}{checkout_path}/{token}
+    # Yetkazish zonasi — Toshkent bounding box (lat/lng'dan AVTOMATIK zona aniqlash)
+    delivery_tashkent_lat_min: float = 41.15
+    delivery_tashkent_lat_max: float = 41.40
+    delivery_tashkent_lng_min: float = 69.10
+    delivery_tashkent_lng_max: float = 69.50
     checkout_token_expiry_hours: int = 24           # bir martalik token muddati
 
     # --- CORS (frontend ulanishi uchun) ---

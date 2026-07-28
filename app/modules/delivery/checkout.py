@@ -39,9 +39,12 @@ async def checkout_submit(
     """Mijoz lokatsiyani yuboradi → buyurtmaga bog'lanadi, narx qo'shiladi, token yopiladi."""
     delivery = await service.resolve_checkout(
         token,
-        zone=payload.zone.value,
-        address_text=payload.address_text,
+        zone=payload.zone.value if payload.zone else None,
         lat=payload.lat,
         lng=payload.lng,
+        address_text=payload.address_text,
+        phone=payload.phone,
+        landmark=payload.landmark,
+        apartment=payload.apartment,
     )
     return DeliveryOut.model_validate(delivery)

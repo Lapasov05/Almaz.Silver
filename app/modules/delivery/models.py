@@ -45,6 +45,10 @@ class Delivery(UUIDMixin, TimestampMixin, Base):
     address_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     lat: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
     lng: Mapped[Decimal | None] = mapped_column(Numeric(9, 6), nullable=True)
+    # Qo'shimcha manzil (kuryer uchun)
+    phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    landmark: Mapped[str | None] = mapped_column(String(255), nullable=True)   # orientir (mo'ljal)
+    apartment: Mapped[str | None] = mapped_column(String(255), nullable=True)  # qavat/kvartira/domofon
     status: Mapped[DeliveryStatus] = mapped_column(
         String(20), server_default=DeliveryStatus.pending.value, nullable=False
     )

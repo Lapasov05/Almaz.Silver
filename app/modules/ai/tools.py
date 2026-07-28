@@ -402,7 +402,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     if name == "request_location":
         from app.modules.delivery.service import DeliveryService
 
-        url, expires_at = await DeliveryService(db).create_checkout_link(uuid.UUID(args["order_id"]))
+        url, _token, expires_at = await DeliveryService(db).create_checkout_link(uuid.UUID(args["order_id"]))
         return {"checkout_url": url, "expires_at": expires_at.isoformat()}
 
     if name == "submit_payment":

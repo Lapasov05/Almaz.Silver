@@ -228,10 +228,14 @@ async def seed_orders(db, convs, products, reviewer: User) -> None:
         return products[name].variants[0].id
 
     async def checkout(order_id, zone):
-        url, _ = await delivery.create_checkout_link(order_id)
-        raw = url.rsplit("/", 1)[1]
-        await delivery.resolve_checkout(raw, zone=zone, address_text="Toshkent sh., Chilonzor 12-45",
-                                        lat=Decimal("41.28"), lng=Decimal("69.20"))
+        _url, raw, _exp = await delivery.create_checkout_link(order_id)
+        if zone == "tashkent":  # koordinata Toshkent chegara-quti ichida -> zona avtomatik tashkent
+            await delivery.resolve_checkout(raw, lat=Decimal("41.31"), lng=Decimal("69.28"),
+                                            address_text="Toshkent sh., Chilonzor 12-45",
+                                            phone="+998901234567", apartment="12-45")
+        else:                   # koordinatasiz -> fallback zona (region)
+            await delivery.resolve_checkout(raw, zone="region",
+                                            address_text="Samarqand vil., BTS 12", phone="+998907654321")
 
     # 1) pending
     await orders.create_order(await cust(0), [OrderItemCreate(variant_id=vid("Nozik ayollar uzugi 'Malika'"),

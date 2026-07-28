@@ -9,9 +9,10 @@ from app.modules.delivery.models import DeliveryProvider, DeliveryStatus, Delive
 
 
 class CheckoutLinkOut(BaseModel):
-    """Mijozga yuboriladigan bir martalik checkout link."""
+    """Mijozga yuboriladigan bir martalik checkout link + raw token (frontend page uchun)."""
 
     url: str
+    token: str          # frontend o'z page URL'ini qurishi uchun (bir martalik)
     expires_at: datetime
 
 
@@ -26,6 +27,9 @@ class DeliveryOut(BaseModel):
     address_text: str | None
     lat: Decimal | None
     lng: Decimal | None
+    phone: str | None
+    landmark: str | None
+    apartment: str | None
     status: DeliveryStatus
 
 
@@ -38,10 +42,14 @@ class CheckoutContextOut(BaseModel):
 
 
 class CheckoutSubmit(BaseModel):
-    zone: DeliveryZone
-    address_text: str | None = Field(default=None, max_length=500)
+    # zona lat/lng'dan AVTOMATIK aniqlanadi; berilsa faqat koordinata bo'lmaganda fallback
+    zone: DeliveryZone | None = None
     lat: Decimal | None = None
     lng: Decimal | None = None
+    address_text: str | None = Field(default=None, max_length=500)
+    phone: str | None = Field(default=None, max_length=32)
+    landmark: str | None = Field(default=None, max_length=255)   # orientir (mo'ljal)
+    apartment: str | None = Field(default=None, max_length=255)  # qavat/kvartira/domofon
 
 
 class DeliveryStatusUpdate(BaseModel):

@@ -46,7 +46,20 @@ class DeliveryService:
         }
 
     # ---------- Checkout link generatsiya (AI/operator chaqiradi) ----------
-    async def create_checkout_link(self, order_id: uuid.UUID) -> tuple[str, datetime]:
+    def _zone_from_coords(self, lat: Decimal | None, lng: Decimal | None, *, fallback: str | None = None) -> str:
+        """lat/lng Toshkent chegara-quti ichida bo'lsa 'tashkent', aks holda 'region'.
+
+        Koordinata bo'lmasa — fallback (frontend bergan zona) yoki 'region'.
+        """
+        if lat is not None and lng is not None:
+            la, ln = float(lat), float(lng)
+            if (settings.delivery_tashkent_lat_min <= la <= settings.delivery_tashkent_lat_max
+                    and settings.delivery_tashkent_lng_min <= ln <= settings.delivery_tashkent_lng_max):
+                return DeliveryZone.tashkent.value
+            return DeliveryZone.region.value
+        return fallback or DeliveryZone.region.value
+
+    async def create_checkout_link(self, order_id: uuid.UUID) -> tuple[str, str, datetime]:
         order = await self.orders.get(order_id)
         if order is None:
             raise NotFoundError("Buyurtma topilmadi")
@@ -68,8 +81,8 @@ class DeliveryService:
             )
         )
         await self.db.commit()
-        url = f"{settings.public_base_url.rstrip('/')}/checkout/{raw}"
-        return url, expires_at
+        url = f"{settings.public_base_url.rstrip('/')}{settings.checkout_path}/{raw}"
+        return url, raw, expires_at
 
     # ---------- Public checkout (mijoz sahifasi) ----------
     async def _validate_token(self, raw_token: str) -> CheckoutToken:
@@ -95,12 +108,18 @@ class DeliveryService:
         self,
         raw_token: str,
         *,
-        zone: str,
-        address_text: str | None,
-        lat: Decimal | None,
-        lng: Decimal | None,
+        zone: str | None = None,
+        lat: Decimal | None = None,
+        lng: Decimal | None = None,
+        address_text: str | None = None,
+        phone: str | None = None,
+        landmark: str | None = None,
+        apartment: str | None = None,
     ) -> Delivery:
-        """Lokatsiyani buyurtmaga bog'laydi, zona narxini qo'shadi, tokenni yopadi (TZ 11)."""
+        """Lokatsiyani buyurtmaga bog'laydi, zona narxini qo'shadi, tokenni yopadi (TZ 11).
+
+        Zona lat/lng'dan AVTOMATIK aniqlanadi (Toshkent chegara-quti); koordinata bo'lmasa fallback.
+        """
         token = await self._validate_token(raw_token)
         order = await self.orders.get(token.order_id)
 
@@ -109,18 +128,22 @@ class DeliveryService:
             delivery = Delivery(order_id=token.order_id)
             await self.repo.add(delivery)
 
-        fee = await self._fee_for_zone(zone)
+        resolved_zone = self._zone_from_coords(lat, lng, fallback=zone)
+        fee = await self._fee_for_zone(resolved_zone)
         provider = (
             DeliveryProvider.yandex.value
-            if zone == DeliveryZone.tashkent.value
+            if resolved_zone == DeliveryZone.tashkent.value
             else DeliveryProvider.bts.value
         )
-        delivery.zone = zone
+        delivery.zone = resolved_zone
         delivery.provider = provider
         delivery.fee = fee
         delivery.address_text = address_text
         delivery.lat = lat
         delivery.lng = lng
+        delivery.phone = phone
+        delivery.landmark = landmark
+        delivery.apartment = apartment
         delivery.status = DeliveryStatus.ready.value
 
         # Buyurtmaga narxni qo'shamiz (TZ 11: to'lovdan oldin)
