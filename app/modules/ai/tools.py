@@ -451,16 +451,24 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         from app.modules.orders.schemas import OrderItemCreate
         from app.modules.orders.service import OrdersService
 
-        items = [
-            OrderItemCreate(
-                variant_id=uuid.UUID(it["variant_id"]),
+        repo = CatalogRepository(db)
+        items = []
+        for it in args.get("items", []):
+            vid = uuid.UUID(it["variant_id"])
+            # AI ba'zan variant_id o'rniga product_id yuboradi — chidamli: product bo'lsa default varianti
+            if await repo.get_variant(vid) is None:
+                product = await repo.get_product(vid)
+                if product is not None:
+                    active = [v for v in product.variants if v.is_active and v.deleted_at is None]
+                    if active:
+                        vid = active[0].id
+            items.append(OrderItemCreate(
+                variant_id=vid,
                 quantity=int(it.get("quantity", 1)),
                 ring_size=it.get("ring_size"),
                 engraving_text=it.get("engraving_text"),
                 box_id=uuid.UUID(it["box_id"]) if it.get("box_id") else None,
-            )
-            for it in args.get("items", [])
-        ]
+            ))
         order = await OrdersService(db).create_order(
             ctx.conversation.customer_id, items, created_by_ai=True
         )
