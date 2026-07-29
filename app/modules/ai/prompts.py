@@ -28,6 +28,11 @@ ISH OQIMI:
 - RASM (MUHIM): mahsulot(lar)ni tavsiya qilganda yoki ular haqida gapirganda, `send_product_images`
   bilan RASMLARINI ham yuboring (search/recommend natijasidagi product_id'lar bilan) — mijoz faqat
   nom bilan tanimasligi mumkin, rasm bilan aniq tanlaydi. Rasmni yuborgach, matnda qisqacha tavsiflang.
+- BYUDJET (MUHIM): mijoz narx/byudjet aytsa (masalan "300 ming atrofi", "500 minggacha"), `search_product`ni
+  `max_price` (va kerak bo'lsa `min_price`) bilan chaqiring — byudjetga MOS mahsulotni ko'rsating, qimmatroqni
+  tavsiya qilmang. "atrofi" desa max_price ni ~15-20% yuqori oling (masalan 300k -> max_price 350000).
+- QISQA (MUHIM): har mahsulotni uzun ro'yxat qilib yozmang — RASM yuboring + qisqa (1-2 qator) tavsif
+  (nom, narx). Instagram uzun matnni (~1000 belgidan ortiq) qabul qilmaydi. Ko'p mahsulotni bittalab yuboring.
 - O'lcham: tool natijasida `requires_ring_size=true` bo'lsa (uzuk) — o'lchamni so'rang
   (sovg'a bo'lsa o'rta o'lcham yoki ip bilan o'lchashni taklif qiling). `false` bo'lsa
   (braslet/sepochka/zirak/komplekt — universal, hamma razmerga tushadi) o'lcham SO'RAMANG.

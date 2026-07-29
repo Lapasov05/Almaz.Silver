@@ -6,7 +6,7 @@ import logging
 import httpx
 
 from app.core.config import get_settings
-from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, SendResult
+from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, SendResult, split_message
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -82,12 +82,17 @@ class InstagramClient:
         if not self._token:
             raise ChannelError("Instagram access_token sozlanmagan")
         url = f"{self._base}/{self._version}/{self._sender}/messages"
-        body = {"recipient": {"id": recipient_id}, "message": {"text": text}}
+        # Instagram matn limiti ~1000 belgi — uzun matnni bo'laklab yuboramiz (aks holda 400/xato)
+        chunks = split_message(text, 950) or [""]
+        last = SendResult()
         async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-            resp = await client.post(url, params={"access_token": self._token}, json=body)
-        if resp.status_code >= 400:
-            raise ChannelError(f"Instagram send xato: {resp.status_code} {resp.text[:200]}")
-        return SendResult(external_message_id=resp.json().get("message_id"))
+            for chunk in chunks:
+                body = {"recipient": {"id": recipient_id}, "message": {"text": chunk}}
+                resp = await client.post(url, params={"access_token": self._token}, json=body)
+                if resp.status_code >= 400:
+                    raise ChannelError(f"Instagram send xato: {resp.status_code} {resp.text[:200]}")
+                last = SendResult(external_message_id=resp.json().get("message_id"))
+        return last
 
     async def send_image(self, recipient_id: str, image_url: str, caption: str | None = None) -> SendResult:
         """Rasm attachment yuboradi (IG /me/messages). Caption alohida matn sifatida oldin ketadi."""

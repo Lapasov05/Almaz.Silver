@@ -22,6 +22,36 @@ def strip_markdown(text: str | None) -> str:
     return text
 
 
+def split_message(text: str | None, limit: int) -> list[str]:
+    """Uzun matnni kanal limiti (masalan Instagram ~1000) bo'yicha bo'laklarga bo'ladi.
+
+    Qatorlar chegarasida bo'ladi; juda uzun qator qattiq kesiladi. Bo'sh matn -> [].
+    """
+    text = (text or "").strip()
+    if not text:
+        return []
+    if len(text) <= limit:
+        return [text]
+    parts: list[str] = []
+    cur = ""
+    for line in text.split("\n"):
+        while len(line) > limit:  # juda uzun bitta qator
+            if cur:
+                parts.append(cur)
+                cur = ""
+            parts.append(line[:limit])
+            line = line[limit:]
+        if len(cur) + len(line) + 1 > limit:
+            if cur:
+                parts.append(cur)
+            cur = line
+        else:
+            cur = (cur + "\n" + line) if cur else line
+    if cur:
+        parts.append(cur)
+    return parts
+
+
 class ChannelError(Exception):
     """Kanal (IG/TG) bilan ishlashда yuzaga kelgan xato (config yo'q, API xatosi)."""
 

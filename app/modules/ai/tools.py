@@ -31,12 +31,17 @@ TOOL_SPECS: list[dict] = [
         "type": "function",
         "function": {
             "name": "search_product",
-            "description": "Katalogdan mahsulot topish: matn, Instagram post linki/shortcode bo'yicha.",
+            "description": (
+                "Katalogdan mahsulot topish: matn, Instagram shortcode, va/yoki NARX (byudjet) bo'yicha. "
+                "Mijoz byudjet aytsa (masalan '300 ming atrofi') max_price/min_price bilan qidiring."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query": {"type": "string", "description": "Matnli qidiruv (nom/tavsif)"},
                     "shortcode": {"type": "string", "description": "Instagram shortcode yoki post URL"},
+                    "min_price": {"type": "number", "description": "Eng past narx (so'm)"},
+                    "max_price": {"type": "number", "description": "Eng baland narx (so'm) — mijoz byudjeti"},
                 },
             },
         },
@@ -69,10 +74,14 @@ TOOL_SPECS: list[dict] = [
         "type": "function",
         "function": {
             "name": "recommend",
-            "description": "Faol mahsulotlardan tavsiya (upsell/cross-sell).",
+            "description": "Faol mahsulotlardan tavsiya (upsell/cross-sell). Byudjet berilsa max_price bilan.",
             "parameters": {
                 "type": "object",
-                "properties": {"context": {"type": "string", "description": "Tavsiya konteksti"}},
+                "properties": {
+                    "context": {"type": "string", "description": "Tavsiya konteksti"},
+                    "min_price": {"type": "number", "description": "Eng past narx (so'm)"},
+                    "max_price": {"type": "number", "description": "Eng baland narx (so'm) — byudjet"},
+                },
             },
         },
     },
@@ -315,10 +324,21 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     catalog = CatalogService(CatalogRepository(db))
 
     if name == "search_product":
+        min_p, max_p = args.get("min_price"), args.get("max_price")
+        eng = await _engraving_settings(db)
+        if min_p is not None or max_p is not None:  # byudjet bo'yicha (effective narx)
+            from app.core.pagination import PageParams
+
+            items, _ = await catalog.list_products(
+                pp=PageParams(limit=6, offset=0), status="active", q=args.get("query"),
+                min_price=Decimal(str(min_p)) if min_p is not None else None,
+                max_price=Decimal(str(max_p)) if max_p is not None else None,
+            )
+            items.sort(key=lambda p: p.effective_price)  # arzonroqdan
+            return {"match_type": "price", "products": [_product_brief(p, eng) for p in items]}
         match_type, results = await catalog.search(
             q=args.get("query"), shortcode=args.get("shortcode"), limit=5
         )
-        eng = await _engraving_settings(db)
         return {"match_type": match_type, "products": [_product_brief(p, eng) for p, _ in results]}
 
     if name == "get_product_details":
@@ -395,7 +415,12 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     if name == "recommend":
         from app.core.pagination import PageParams
 
-        products, _ = await catalog.list_products(pp=PageParams(limit=5, offset=0), status="active")
+        min_p, max_p = args.get("min_price"), args.get("max_price")
+        products, _ = await catalog.list_products(
+            pp=PageParams(limit=5, offset=0), status="active",
+            min_price=Decimal(str(min_p)) if min_p is not None else None,
+            max_price=Decimal(str(max_p)) if max_p is not None else None,
+        )
         eng = await _engraving_settings(db)
         return {"products": [_product_brief(p, eng) for p in products]}
 

@@ -5,7 +5,7 @@ import logging
 import httpx
 
 from app.core.config import get_settings
-from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, SendResult
+from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, SendResult, split_message
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -68,16 +68,20 @@ class TelegramClient:
     ) -> SendResult:
         if not self._token:
             raise ChannelError("TELEGRAM_BOT_TOKEN sozlanmagan")
-        payload: dict = {"chat_id": recipient_id, "text": text}
-        if reply_markup is not None:  # inline tugmalar (masalan tasdiq/rad)
-            payload["reply_markup"] = reply_markup
         url = f"{self._base}/bot{self._token}/sendMessage"
+        chunks = split_message(text, 4000) or [""]  # Telegram limiti 4096
+        last = SendResult()
         async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-            resp = await client.post(url, json=payload)
-        if resp.status_code != 200 or not resp.json().get("ok"):
-            raise ChannelError(f"Telegram sendMessage xato: {resp.status_code} {resp.text[:200]}")
-        result = resp.json().get("result", {})
-        return SendResult(external_message_id=str(result.get("message_id")) if result.get("message_id") else None)
+            for i, chunk in enumerate(chunks):
+                payload: dict = {"chat_id": recipient_id, "text": chunk}
+                if reply_markup is not None and i == len(chunks) - 1:  # tugmalar oxirgi bo'lakda
+                    payload["reply_markup"] = reply_markup
+                resp = await client.post(url, json=payload)
+                if resp.status_code != 200 or not resp.json().get("ok"):
+                    raise ChannelError(f"Telegram sendMessage xato: {resp.status_code} {resp.text[:200]}")
+                result = resp.json().get("result", {})
+                last = SendResult(external_message_id=str(result.get("message_id")) if result.get("message_id") else None)
+        return last
 
     async def send_image(self, recipient_id: str, image_url: str, caption: str | None = None) -> SendResult:
         """sendPhoto — rasm (URL) + ixtiyoriy caption."""
