@@ -333,6 +333,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 pp=PageParams(limit=6, offset=0), status="active", q=args.get("query"),
                 min_price=Decimal(str(min_p)) if min_p is not None else None,
                 max_price=Decimal(str(max_p)) if max_p is not None else None,
+                in_stock=True,  # faqat zaxirada bor (tavsiya qilingan mahsulot buyurtma qilinsin)
             )
             items.sort(key=lambda p: p.effective_price)  # arzonroqdan
             return {"match_type": "price", "products": [_product_brief(p, eng) for p in items]}
@@ -420,6 +421,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             pp=PageParams(limit=5, offset=0), status="active",
             min_price=Decimal(str(min_p)) if min_p is not None else None,
             max_price=Decimal(str(max_p)) if max_p is not None else None,
+            in_stock=True,  # faqat zaxirada bor mahsulotlar tavsiya qilinadi
         )
         eng = await _engraving_settings(db)
         return {"products": [_product_brief(p, eng) for p in products]}
