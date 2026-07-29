@@ -33,6 +33,48 @@ class DeliveryStatus(str, enum.Enum):
     delivered = "delivered"
 
 
+class LocationType(str, enum.Enum):
+    """Lokatsiya turi — narx va yetkazish usulini belgilaydi (TZ 11)."""
+
+    toshkent = "Toshkent"  # Toshkent shahar ichida — kuryer, 50k
+    bts = "BTS"            # Toshkentdan tashqarida — eng yaqin BTS filiali, 30k
+
+
+class BtsBranch(UUIDMixin, TimestampMixin, Base):
+    """BTS filiali (yetkazish punkti) — bot_branches.json'dan seed qilinadi, dinamik qo'shsa bo'ladi."""
+
+    __tablename__ = "bts_branch"
+
+    ext_id: Mapped[str] = mapped_column(String(32), unique=True, index=True, nullable=False)  # BTS "Id"
+    name: Mapped[str] = mapped_column(String(150), nullable=False)          # Filial
+    region: Mapped[str | None] = mapped_column(String(120), nullable=True)  # viloyat/shahar
+    district: Mapped[str | None] = mapped_column(String(120), nullable=True)  # tuman
+    address: Mapped[str | None] = mapped_column(Text, nullable=True)        # Manzil
+    landmark: Mapped[str | None] = mapped_column(String(255), nullable=True)  # Moljal (mo'ljal)
+    phone: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    work_hours: Mapped[str | None] = mapped_column(String(255), nullable=True)  # IshVaqtlari
+    lat: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    lng: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+
+
+class CustomerLocation(UUIDMixin, TimestampMixin, Base):
+    """Mijoz lokatsiyasi — id bilan saqlanadi, buyurtmaga biriktiriladi, qayta ishlatiladi (TZ 7.3)."""
+
+    __tablename__ = "customer_location"
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("customer.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    lat: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    lng: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
+    location_type: Mapped[LocationType] = mapped_column(String(20), nullable=False)  # Toshkent | BTS
+    bts_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("bts_branch.id", ondelete="SET NULL"), nullable=True
+    )
+    address_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class Delivery(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "delivery"
 
@@ -49,6 +91,14 @@ class Delivery(UUIDMixin, TimestampMixin, Base):
     phone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     landmark: Mapped[str | None] = mapped_column(String(255), nullable=True)   # orientir (mo'ljal)
     apartment: Mapped[str | None] = mapped_column(String(255), nullable=True)  # qavat/kvartira/domofon
+    # Lokatsiya turi (Toshkent/BTS) + biriktirilgan yozuvlar (TZ 11)
+    location_type: Mapped[LocationType | None] = mapped_column(String(20), nullable=True)
+    customer_location_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("customer_location.id", ondelete="SET NULL"), nullable=True
+    )
+    bts_branch_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("bts_branch.id", ondelete="SET NULL"), nullable=True
+    )
     status: Mapped[DeliveryStatus] = mapped_column(
         String(20), server_default=DeliveryStatus.pending.value, nullable=False
     )

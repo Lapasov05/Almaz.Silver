@@ -656,9 +656,13 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             if not img:
                 skipped += 1  # rasmi yo'q — yuborilmaydi
                 continue
-            # Har rasm TAGIDA to'liq ma'lumot (nom, narx, material, tosh) — mijoz rasm+matnni birga ko'radi.
-            # Bir mahsulot = bitta rasm + bitta izoh; keyingisi alohida (ketma-ket) yuboriladi.
-            await inbox.send_media(ctx.conversation, img, caption=_image_caption(product))
+            # MUHIM (Instagram tartibi): avval RASM (captionsiz), KEYIN alohida matn xabari.
+            # Caption bilan yuborilса IG matnni rasmdan OLDIN ko'rsatadi — shuning uchun ajratamiz:
+            # rasm → tagidan ma'lumot (nom, narx, material, tosh). Har mahsulot ketma-ket.
+            from app.modules.ai.guardrail import enforce
+
+            await inbox.send_media(ctx.conversation, img, caption=None)
+            await inbox.ai_send(ctx.conversation, enforce(_image_caption(product)).text)
             sent += 1
         return {"sent": sent, "skipped_no_image": skipped}
 
@@ -738,21 +742,6 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         from app.modules.orders.schemas import OrderItemCreate
         from app.modules.orders.service import OrdersService
 
-        # Double-order himoyasi: mijozда allaqачон faol (to'lanmagan) buyurtма bo'lsa,
-        # yangi yaratmaymiz — mavjudini qaytaramiz (AI shu bilan davom etadi: manzil/to'lov).
-        existing = await OrdersRepository(db).get_active_order(ctx.conversation.customer_id)
-        if existing is not None:
-            return {
-                "order_id": str(existing.id),
-                "order_no": existing.order_no,
-                "status": existing.status,
-                "items_total": _num(existing.items_total),
-                "grand_total": _num(existing.grand_total),
-                "already_exists": True,
-                "note": "Mijozda allaqachon faol buyurtma bor — yangisi yaratilmadi. "
-                        "Shu buyurtма bilan davom eting (manzil so'rang yoki to'lovga o'ting).",
-            }
-
         repo = CatalogRepository(db)
         items = []
         for it in args.get("items", []):
@@ -773,6 +762,25 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 engraving_text=it.get("engraving_text"),
                 box_id=box_id,
             ))
+
+        # Bir turdagi dublni oldini olish: mijozning faol buyurtmasi AYNAN shu mahsulotlar bo'lsa,
+        # yangi yaratmaymiz (bir suhbatда ikki marta chaqirilса). Boshqa mahsulot bo'lsa —
+        # create_order oldingisini avtomatik bekor qiladi (supersede) va yangisini yaratadi.
+        existing = await OrdersRepository(db).get_active_order(ctx.conversation.customer_id)
+        if existing is not None:
+            want = sorted((str(i.variant_id), i.quantity, i.ring_size or "") for i in items)
+            have = sorted((str(i.variant_id), i.quantity, i.ring_size or "") for i in existing.items)
+            if want == have:
+                return {
+                    "order_id": str(existing.id),
+                    "order_no": existing.order_no,
+                    "status": existing.status,
+                    "items_total": _num(existing.items_total),
+                    "grand_total": _num(existing.grand_total),
+                    "already_exists": True,
+                    "note": "Aynan shu buyurtma allaqachon bor — shu bilan davom eting (manzil/to'lov).",
+                }
+
         order = await OrdersService(db).create_order(
             ctx.conversation.customer_id, items, created_by_ai=True
         )
@@ -803,15 +811,23 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         if order is None:
             return {"error": "Faol buyurtma topilmadi — avval create_order chaqiring."}
         cust = await db.get(Customer, ctx.conversation.customer_id)
-        delivery = await DeliveryRepository(db).get_by_order(order.id)
+        drepo = DeliveryRepository(db)
+        delivery = await drepo.get_by_order(order.id)
         has_location = bool(delivery and (delivery.address_text or (delivery.lat is not None)))
+        bts = None
+        if delivery is not None and delivery.bts_branch_id is not None:
+            b = await drepo.get_bts_branch(delivery.bts_branch_id)
+            if b is not None:  # BTS bo'lsa — mijoz shu filialdan oladi
+                bts = {"name": b.name, "region": b.region, "district": b.district,
+                       "address": b.address, "phone": b.phone, "work_hours": b.work_hours}
         return {
             "order_no": order.order_no,
             "status": order.status,
             "items": await _order_items_brief(db, order),
             "items_total": _num(order.items_total),
             "delivery_fee": _num(order.delivery_fee),
-            "delivery_zone": delivery.zone if delivery else None,
+            "location_type": delivery.location_type if delivery else None,  # Toshkent | BTS
+            "bts_branch": bts,  # BTS bo'lsa eng yaqin filial (mijoz shu yerdan oladi)
             "grand_total": _num(order.grand_total),
             "customer_name": cust.full_name if cust else None,
             "customer_phone": cust.phone if cust else None,

@@ -7,12 +7,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError, NotFoundError
+from app.modules.delivery.geo import is_in_tashkent, nearest_branch
 from app.modules.delivery.models import (
     CheckoutToken,
+    CustomerLocation,
     Delivery,
     DeliveryProvider,
     DeliveryStatus,
     DeliveryZone,
+    LocationType,
 )
 from app.modules.delivery.repository import DeliveryRepository
 from app.modules.delivery.tokens import generate_token, hash_token
@@ -81,7 +84,8 @@ class DeliveryService:
             )
         )
         await self.db.commit()
-        url = f"{settings.public_base_url.rstrip('/')}{settings.checkout_path}/{raw}"
+        # Mijozga yuboriladigan xarita linki — frontend sahifasi: {frontend_map_url}/map/{token}
+        url = f"{settings.frontend_map_url.rstrip('/')}/map/{raw}"
         return url, raw, expires_at
 
     # ---------- Public checkout (mijoz sahifasi) ----------
@@ -108,35 +112,63 @@ class DeliveryService:
         self,
         raw_token: str,
         *,
-        zone: str | None = None,
         lat: Decimal | None = None,
         lng: Decimal | None = None,
         address_text: str | None = None,
         phone: str | None = None,
         landmark: str | None = None,
         apartment: str | None = None,
+        zone: str | None = None,  # legacy — endi lat/lng'dan aniqlanadi
     ) -> Delivery:
-        """Lokatsiyani buyurtmaga bog'laydi, zona narxini qo'shadi, tokenni yopadi (TZ 11).
+        """Frontend map'dan kelgan lat/lng'ni buyurtmaga bog'laydi (TZ 11).
 
-        Zona lat/lng'dan AVTOMATIK aniqlanadi (Toshkent chegara-quti); koordinata bo'lmasa fallback.
+        - Toshkent ichida → type=Toshkent, narx 50k, mijoz lat/lng saqlanadi.
+        - Tashqarida → type=BTS, narx 30k, eng yaqin BTS filiali biriktiriladi.
+        Mijoz lokatsiyasi `customer_location` (id bilan) saqlanadi; token bir martalik yopiladi.
         """
         token = await self._validate_token(raw_token)
         order = await self.orders.get(token.order_id)
+
+        if lat is None or lng is None:
+            raise AppError("Lokatsiya (lat/lng) yuborilishi shart")
 
         delivery = token.delivery or await self.repo.get_by_order(token.order_id)
         if delivery is None:
             delivery = Delivery(order_id=token.order_id)
             await self.repo.add(delivery)
 
-        resolved_zone = self._zone_from_coords(lat, lng, fallback=zone)
-        fee = await self._fee_for_zone(resolved_zone)
-        provider = (
-            DeliveryProvider.yandex.value
-            if resolved_zone == DeliveryZone.tashkent.value
-            else DeliveryProvider.bts.value
+        # --- Zona / tur aniqlash ---
+        if is_in_tashkent(float(lat), float(lng)):
+            location_type = LocationType.toshkent
+            resolved_zone = DeliveryZone.tashkent.value
+            provider = DeliveryProvider.yandex.value
+            fee = await self._fee_for_zone(resolved_zone)
+            branch = None
+        else:
+            location_type = LocationType.bts
+            resolved_zone = DeliveryZone.region.value
+            provider = DeliveryProvider.bts.value
+            fee = await self._fee_for_zone(resolved_zone)
+            # Eng yaqin BTS filiali (koordinata bo'yicha)
+            branches = await self.repo.list_active_bts_branches()
+            nb = nearest_branch(float(lat), float(lng), branches)
+            branch = nb[0] if nb else None
+
+        # --- Mijoz lokatsiyasini saqlaymiz (id bilan, qayta ishlatiladi) ---
+        loc = CustomerLocation(
+            customer_id=order.customer_id,
+            lat=lat, lng=lng,
+            location_type=location_type.value,
+            bts_branch_id=(branch.id if branch is not None else None),
+            address_text=address_text,
         )
+        await self.repo.add(loc)
+
         delivery.zone = resolved_zone
         delivery.provider = provider
+        delivery.location_type = location_type.value
+        delivery.customer_location_id = loc.id
+        delivery.bts_branch_id = branch.id if branch is not None else None
         delivery.fee = fee
         delivery.address_text = address_text
         delivery.lat = lat
@@ -149,7 +181,6 @@ class DeliveryService:
         # Buyurtmaga narxni qo'shamiz (TZ 11: to'lovdan oldin)
         order.delivery_fee = fee
         order.grand_total = order.items_total + fee
-        # pending → waiting_payment (to'lovga tayyor)
         if order.status == OrderStatus.pending.value:
             order.history.append(
                 OrderStatusHistory(

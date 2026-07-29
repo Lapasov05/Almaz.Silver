@@ -99,17 +99,19 @@ class InstagramClient:
         if not self._token:
             raise ChannelError("Instagram access_token sozlanmagan")
         url = f"{self._base}/{self._version}/{self._sender}/messages"
-        # IG bitta xabarda rasm+matnni birga qo'llamaydi — caption bo'lsa avval matn yuboriladi
+        # IG bitta xabarda rasm+matnni birga qo'llamaydi. Tartib MUHIM: avval RASM, keyin caption
+        # (aks holda matn rasmdan oldin chiqib, chalkash ko'rinadi).
         async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
-            if caption:
-                await client.post(url, params={"access_token": self._token},
-                                  json={"recipient": {"id": recipient_id}, "message": {"text": caption}})
             body = {"recipient": {"id": recipient_id},
                     "message": {"attachment": {"type": "image", "payload": {"url": image_url}}}}
             resp = await client.post(url, params={"access_token": self._token}, json=body)
-        if resp.status_code >= 400:
-            raise ChannelError(f"Instagram rasm yuborish xato: {resp.status_code} {resp.text[:200]}")
-        return SendResult(external_message_id=resp.json().get("message_id"))
+            if resp.status_code >= 400:
+                raise ChannelError(f"Instagram rasm yuborish xato: {resp.status_code} {resp.text[:200]}")
+            result_id = resp.json().get("message_id")
+            if caption:  # rasmdan KEYIN matn
+                await client.post(url, params={"access_token": self._token},
+                                  json={"recipient": {"id": recipient_id}, "message": {"text": caption}})
+        return SendResult(external_message_id=result_id)
 
     async def send_typing(self, recipient_id: str) -> None:
         """sender_action=typing_on — "yozyapti..." (best-effort)."""

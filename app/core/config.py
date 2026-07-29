@@ -56,8 +56,11 @@ class Settings(BaseSettings):
     http_timeout_seconds: float = 10.0
 
     # --- Checkout / lokatsiya (TZ 11) ---
-    public_base_url: str = "http://localhost:8000"  # checkout link uchun tashqi bazaviy URL (frontend domeni)
-    checkout_path: str = "/checkout"                 # link: {public_base_url}{checkout_path}/{token}
+    public_base_url: str = "http://localhost:8000"  # rasm/statik + backend uchun tashqi bazaviy URL
+    checkout_path: str = "/checkout"                 # (legacy) backend checkout API yo'li
+    # Mijozga yuboriladigan LOKATSIYA (xarita) linki — frontend sahifasi:
+    #   {frontend_map_url}/map/{token}. Frontend lat/lng ni backendga qaytaradi.
+    frontend_map_url: str = "https://almaz-steel.vercel.app"
     # Yetkazish zonasi — Toshkent bounding box (lat/lng'dan AVTOMATIK zona aniqlash)
     delivery_tashkent_lat_min: float = 41.15
     delivery_tashkent_lat_max: float = 41.40

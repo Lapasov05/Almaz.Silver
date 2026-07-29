@@ -1,45 +1,43 @@
-"""Public checkout sahifasi API (TZ 11) — OCHIQ, faqat bir martalik token bilan himoyalangan.
+"""Public checkout / map sahifasi API (TZ 11) — OCHIQ, bir martalik token bilan himoyalangan.
 
-Mijoz IG/TG orqali kelgan linkni ochadi: Toshkent — xarita pin (lat/lng),
-viloyat — BTS struktura manzil (address_text). Token: muddatli, bir martalik.
+Mijoz IG/TG orqali kelgan xarita linkini ochadi: `{frontend_map_url}/map/{token}`.
+Frontend lat/lng ni backendga qaytaradi → zona (Toshkent/BTS) aniqlanadi, narx qo'shiladi.
+Token: muddatli, bir martalik. Endpoint'lar `/checkout/{token}` va `/map/{token}` (bir xil).
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.modules.delivery.repository import DeliveryRepository
 from app.modules.delivery.schemas import (
+    BtsBranchOut,
     CheckoutContextOut,
+    CheckoutResultOut,
     CheckoutSubmit,
-    DeliveryOut,
 )
 from app.modules.delivery.service import DeliveryService
+from app.modules.orders.repository import OrdersRepository
 
-router = APIRouter(prefix="/checkout", tags=["checkout"])
+router = APIRouter(tags=["checkout"])
 
 
 def get_delivery_service(db: AsyncSession = Depends(get_db)) -> DeliveryService:
     return DeliveryService(db)
 
 
-@router.get("/{token}", response_model=CheckoutContextOut)
-async def checkout_context(
-    token: str, service: DeliveryService = Depends(get_delivery_service)
-) -> CheckoutContextOut:
-    """Sahifa ma'lumoti: buyurtma xulosasi + zona narxlari (token tekshiriladi)."""
+async def _context(token: str, service: DeliveryService) -> CheckoutContextOut:
     ctx = await service.get_checkout_context(token)
     return CheckoutContextOut(**ctx)
 
 
-@router.post("/{token}", response_model=DeliveryOut)
-async def checkout_submit(
-    token: str,
-    payload: CheckoutSubmit,
-    service: DeliveryService = Depends(get_delivery_service),
-) -> DeliveryOut:
-    """Mijoz lokatsiyani yuboradi → buyurtmaga bog'lanadi, narx qo'shiladi, token yopiladi."""
+async def _submit(token: str, payload: CheckoutSubmit, service: DeliveryService,
+                  db: AsyncSession) -> CheckoutResultOut:
+    """Mijoz lokatsiyani yuboradi → buyurtmaga bog'lanadi, narx qo'shiladi, token yopiladi.
+
+    Toshkent ichida bo'lsa type=Toshkent (50k); tashqarida bo'lsa type=BTS (30k) + eng yaqin filial.
+    """
     delivery = await service.resolve_checkout(
         token,
-        zone=payload.zone.value if payload.zone else None,
         lat=payload.lat,
         lng=payload.lng,
         address_text=payload.address_text,
@@ -47,4 +45,43 @@ async def checkout_submit(
         landmark=payload.landmark,
         apartment=payload.apartment,
     )
-    return DeliveryOut.model_validate(delivery)
+    order = await OrdersRepository(db).get(delivery.order_id)
+    branch = None
+    if delivery.bts_branch_id is not None:
+        b = await DeliveryRepository(db).get_bts_branch(delivery.bts_branch_id)
+        branch = BtsBranchOut.model_validate(b) if b is not None else None
+    return CheckoutResultOut(
+        order_no=order.order_no,
+        location_type=delivery.location_type,
+        delivery_fee=delivery.fee,
+        items_total=order.items_total,
+        grand_total=order.grand_total,
+        address_text=delivery.address_text,
+        bts_branch=branch,
+    )
+
+
+# --- /checkout/{token} (backend API) ---
+@router.get("/checkout/{token}", response_model=CheckoutContextOut)
+async def checkout_context(token: str, service: DeliveryService = Depends(get_delivery_service)):
+    return await _context(token, service)
+
+
+@router.post("/checkout/{token}", response_model=CheckoutResultOut)
+async def checkout_submit(token: str, payload: CheckoutSubmit,
+                          service: DeliveryService = Depends(get_delivery_service),
+                          db: AsyncSession = Depends(get_db)):
+    return await _submit(token, payload, service, db)
+
+
+# --- /map/{token} (frontend map sahifasi shu API'ni chaqiradi — bir xil xatti-harakat) ---
+@router.get("/map/{token}", response_model=CheckoutContextOut)
+async def map_context(token: str, service: DeliveryService = Depends(get_delivery_service)):
+    return await _context(token, service)
+
+
+@router.post("/map/{token}", response_model=CheckoutResultOut)
+async def map_submit(token: str, payload: CheckoutSubmit,
+                     service: DeliveryService = Depends(get_delivery_service),
+                     db: AsyncSession = Depends(get_db)):
+    return await _submit(token, payload, service, db)

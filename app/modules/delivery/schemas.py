@@ -5,7 +5,12 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.delivery.models import DeliveryProvider, DeliveryStatus, DeliveryZone
+from app.modules.delivery.models import (
+    DeliveryProvider,
+    DeliveryStatus,
+    DeliveryZone,
+    LocationType,
+)
 
 
 class CheckoutLinkOut(BaseModel):
@@ -16,6 +21,23 @@ class CheckoutLinkOut(BaseModel):
     expires_at: datetime
 
 
+class BtsBranchOut(BaseModel):
+    """BTS filiali (yetkazish punkti) — mijozga ko'rsatiladigan ma'lumot."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    region: str | None
+    district: str | None
+    address: str | None
+    landmark: str | None
+    phone: str | None
+    work_hours: str | None
+    lat: Decimal
+    lng: Decimal
+
+
 class DeliveryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -23,6 +45,7 @@ class DeliveryOut(BaseModel):
     order_id: uuid.UUID
     zone: DeliveryZone | None
     provider: DeliveryProvider | None
+    location_type: LocationType | None
     fee: Decimal
     address_text: str | None
     lat: Decimal | None
@@ -39,6 +62,18 @@ class CheckoutContextOut(BaseModel):
     order_no: str
     items_total: Decimal
     zones: dict[str, Decimal]  # {"tashkent": 50000, "region": 30000}
+
+
+class CheckoutResultOut(BaseModel):
+    """Mijoz lokatsiyani yuborgach frontendga qaytadigan natija (tasdiq sahifasi uchun)."""
+
+    order_no: str
+    location_type: LocationType       # Toshkent | BTS
+    delivery_fee: Decimal
+    items_total: Decimal
+    grand_total: Decimal
+    address_text: str | None = None
+    bts_branch: BtsBranchOut | None = None  # BTS bo'lsa — eng yaqin filial
 
 
 class CheckoutSubmit(BaseModel):

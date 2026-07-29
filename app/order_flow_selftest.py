@@ -90,8 +90,10 @@ async def main():
         url0 = media_msgs[0].attachments[0]["url"]
         check(url0.startswith("https://shop.example.uz/uploads/"),
               f"Rasm URL public bazaga normalizatsiya qilindi: {url0}")
-        cap0 = media_msgs[0].content or ""
-        check("Narx:" in cap0 and "so'm" in cap0, f"Izohда nom+narx bor: {cap0!r}")
+        # Ma'lumot endi ALOHIDA matn xabarida (rasmdan keyin) — caption emas
+        text_msgs = [m for m in msgs if not m.attachments and m.direction == "outgoing"]
+        info_ok = any("Narx:" in (m.content or "") and "so'm" in (m.content or "") for m in text_msgs)
+        check(info_ok, "Ma'lumot rasmdan KEYIN alohida matn xabarida (nom+narx)")
 
         print("\n── 3) create_order (uzuk + o'lcham) ──")
         r = await dispatch("create_order", {"items": [{"variant_id": uzuk_vid, "quantity": 1, "ring_size": "18"}]}, ctx)

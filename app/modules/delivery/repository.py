@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.modules.delivery.models import CheckoutToken, Delivery
+from app.modules.delivery.models import BtsBranch, CheckoutToken, CustomerLocation, Delivery
 
 
 class DeliveryRepository:
@@ -16,6 +16,13 @@ class DeliveryRepository:
         self.db.add(obj)
         await self.db.flush()
         return obj
+
+    async def list_active_bts_branches(self) -> list[BtsBranch]:
+        res = await self.db.execute(select(BtsBranch).where(BtsBranch.is_active.is_(True)))
+        return list(res.scalars().all())
+
+    async def get_bts_branch(self, branch_id: uuid.UUID) -> BtsBranch | None:
+        return await self.db.get(BtsBranch, branch_id)
 
     async def get(self, delivery_id: uuid.UUID) -> Delivery | None:
         return await self.db.get(Delivery, delivery_id)

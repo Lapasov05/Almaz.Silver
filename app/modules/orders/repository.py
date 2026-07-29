@@ -44,6 +44,16 @@ class OrdersRepository:
         )
         return res.scalar_one_or_none()
 
+    async def list_active_orders(self, customer_id: uuid.UUID) -> list[Order]:
+        """Mijozning barcha faol (to'lanmagan) buyurtmalari — supersede uchun."""
+        res = await self.db.execute(
+            select(Order)
+            .options(*_ORDER_LOADERS)
+            .where(Order.customer_id == customer_id, Order.status.in_(self._ACTIVE_STATUSES))
+            .order_by(Order.created_at.desc())
+        )
+        return list(res.scalars().all())
+
     async def get_latest_order(self, customer_id: uuid.UUID) -> Order | None:
         """Mijozning eng so'nggi buyurtmasi (har qanday statusда) — status so'rovi uchun."""
         res = await self.db.execute(

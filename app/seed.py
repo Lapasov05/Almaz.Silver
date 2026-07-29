@@ -141,7 +141,10 @@ async def main() -> None:
         await seed_catalog_references(db)
         await seed_settings(db)
         await seed_knowledge(db)
+        from app.modules.delivery.bts_seed import seed_bts_branches
+        bts = await seed_bts_branches(db)  # BTS filiallari (bot_branches.json)
         await db.commit()
+        print(f"   BTS filiallari: +{bts['created']} yangi, {bts['updated']} yangilandi ({bts['total']} jami)")
     print(
         f"✅ Seed yakunlandi. Super Admin: {settings.seed_admin_email} "
         f"({len(all_permission_codes())} permission, {len(SYSTEM_ROLES)} system rol)"

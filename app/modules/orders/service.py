@@ -54,9 +54,24 @@ class OrdersService:
         changed_by: uuid.UUID | None = None,
         created_by_ai: bool = False,
     ) -> Order:
-        """Buyurtma + order_item yaratadi va zaxirani band qiladi (reserved_qty++)."""
+        """Buyurtma + order_item yaratadi va zaxirani band qiladi (reserved_qty++).
+
+        Bir mijozda BITTA faol buyurtma invarianti (TZ 11): yangi buyurtma yaratilganda mijozning
+        oldingi faol (to'lanmagan) buyurtmalari avtomatik BEKOR qilinadi (reservation bo'shaydi).
+        Shunda lokatsiya tokeni doim yagona faol buyurtmaga tegishli bo'ladi — chalkashlik yo'q.
+        """
         if not items:
             raise AppError("Buyurtmada kamida bitta mahsulot bo'lishi kerak")
+
+        # Oldingi faol buyurtmalarni bekor qilamiz (supersede)
+        for prev in await self.repo.list_active_orders(customer_id):
+            await self._release_reservation(prev)
+            prev.history.append(
+                OrderStatusHistory(
+                    from_status=prev.status, to_status=OrderStatus.cancelled.value, changed_by=changed_by
+                )
+            )
+            prev.status = OrderStatus.cancelled.value
 
         settings_repo = SettingsRepository(self.db)
         # Bonuslar global (TZ 18): yaratish vaqtidagi nusxa
