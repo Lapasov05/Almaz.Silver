@@ -184,16 +184,50 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "submit_payment",
-            "description": "Mijoz chek va ism-familiyasini yuborganда to'lovni ko'rib chiqishga uzatish.",
+            "name": "get_order_summary",
+            "description": (
+                "Buyurtma XULOSASI: mahsulotlar, mahsulotlar summasi (items_total), yetkazish narxi "
+                "(delivery_fee) va zonasi, JAMI to'lov (grand_total), hamda mijoz ma'lumotlari "
+                "(ism, telefon, manzil). Lokatsiya olingach TO'LOVdan OLDIN chaqiring — mijozga jami "
+                "summa + dastavkani ko'rsatish va ma'lumotlarini tasdiqlatish uchun. order_id ixtiyoriy "
+                "(berilmasa faol buyurtma olinadi)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"order_id": {"type": "string", "description": "Ixtiyoriy"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_order_status",
+            "description": (
+                "Mijozning buyurtma HOLATINI (statusini) qaytaradi — mijoz 'buyurtmam qayerda', "
+                "'holati qanday', 'tasdiqlandimi' deб so'raganда ishlating. order_id ixtiyoriy."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"order_id": {"type": "string", "description": "Ixtiyoriy"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_receipt",
+            "description": (
+                "Mijoz TO'LOV CHEKINING RASMINI yuborganда uni to'lovga tasdiqlashga (operator/owner) "
+                "uzatadi. Chek rasmini mijozning oxirgi yuborgan rasmidan AVTOMATIK oladi — receipt_url "
+                "berish shart EMAS. Faqat mijoz chek RASMINI yuborganда chaqiring (matn emas). order_id "
+                "va payer_name ixtiyoriy (berilmasa faol buyurtma va mijoz ismi olinadi)."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "order_id": {"type": "string"},
-                    "receipt_url": {"type": "string", "description": "Chek rasmi URL (object storage)"},
-                    "payer_name": {"type": "string", "description": "Karta egasi ism-familiyasi"},
+                    "order_id": {"type": "string", "description": "Ixtiyoriy"},
+                    "payer_name": {"type": "string", "description": "Karta egasi ismi (ixtiyoriy)"},
                 },
-                "required": ["order_id", "receipt_url", "payer_name"],
             },
         },
     },
@@ -238,13 +272,16 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "save_customer_name",
             "description": (
-                "Mijoz o'z ISMINI (yoki ism-familiyasini) aytsa, uni saqlaydi — CRM'da 'Mijoz' o'rniga "
-                "ismi ko'rinadi va keyingi murojaatlarda ism bilan gaplashiladi. Faqat haqiqiy ism berilganda."
+                "Mijozning ISM-FAMILIYASI va/yoki TELEFON raqamini saqlaydi — buyurtma rasmiylashtirish "
+                "uchun kerak (CRM'da 'Mijoz' o'rniga ismi ko'rinadi). Mijoz ismini yoki telefonini aytsa "
+                "DARHOL chaqiring. Ikkalasidan biri bo'lsa ham bo'ladi."
             ),
             "parameters": {
                 "type": "object",
-                "properties": {"name": {"type": "string", "description": "Mijozning ismi yoki ism-familiyasi"}},
-                "required": ["name"],
+                "properties": {
+                    "name": {"type": "string", "description": "Mijozning ism-familiyasi (ixtiyoriy)"},
+                    "phone": {"type": "string", "description": "Telefon raqami (ixtiyoriy)"},
+                },
             },
         },
     },
@@ -294,6 +331,29 @@ def _product_brief(product: Product, engraving: tuple[bool, Decimal] | None = No
             else None,
         }
     return brief
+
+
+def _image_caption(product: Product) -> str:
+    """Mahsulot rasmi ostidagi izoh — nom, narx (chegirma bo'lsa eski narx ham), material, tosh.
+
+    Guardrail send_media ichida caption'ni ham tekshiradi (taqiqlangan atama almashadi).
+    """
+    price = int(product.effective_price)
+    if product.discount_price is not None:
+        price_line = f"{price:,} so'm (eski narx {int(product.price):,})".replace(",", " ")
+    else:
+        price_line = f"{price:,} so'm".replace(",", " ")
+    lines = [product.name_uz, f"Narx: {price_line}"]
+    detail = []
+    if product.material:
+        detail.append(product.material.name_uz)
+    if product.stone:
+        detail.append(product.stone.name_uz)
+    if detail:
+        lines.append(" · ".join(detail))
+    if product.requires_ring_size:
+        lines.append("O'lcham (razmer)ni belgilashingiz mumkin.")
+    return "\n".join(lines)
 
 
 async def _engraving_settings(db: AsyncSession) -> tuple[bool, Decimal]:
@@ -386,6 +446,132 @@ async def _resolve_variant_id(repo, catalog, raw):
     return None
 
 
+# Buyurtma statuslari — mijozga tushunarli o'zbekcha matn
+_ORDER_STATUS_UZ: dict[str, str] = {
+    "draft": "shakllantirilmoqda",
+    "pending": "yaratildi, manzil/to'lov kutilmoqda",
+    "waiting_payment": "to'lov kutilmoqda",
+    "payment_review": "to'lov cheki tekshirilmoqda",
+    "confirmed": "tasdiqlandi — tayyorlanmoqda",
+    "preparing": "tayyorlanmoqda",
+    "packed": "qadoqlandi",
+    "shipping": "yetkazilmoqda",
+    "delivered": "yetkazildi",
+    "completed": "yakunlandi",
+    "cancelled": "bekor qilindi",
+    "refunded": "pul qaytarildi",
+    "returned": "qaytarildi",
+}
+
+
+async def _resolve_order(db: AsyncSession, ctx: ToolContext, raw_order_id, *, latest: bool = False):
+    """order_id berilsa o'shani, aks holda mijozning faol (yoki latest=True bo'lsa eng so'nggi) buyurtmasi."""
+    from app.modules.orders.repository import OrdersRepository
+
+    repo = OrdersRepository(db)
+    if raw_order_id:
+        try:
+            return await repo.get(uuid.UUID(str(raw_order_id)))
+        except (ValueError, TypeError):
+            pass
+    if latest:
+        return await repo.get_latest_order(ctx.conversation.customer_id)
+    return await repo.get_active_order(ctx.conversation.customer_id)
+
+
+async def _order_items_brief(db: AsyncSession, order) -> list[dict]:
+    """Buyurtma itemlari qisqacha (mahsulot nomi lazy-load'siz olinadi)."""
+    repo = CatalogRepository(db)
+    out: list[dict] = []
+    for it in order.items:
+        variant = await repo.get_variant(it.variant_id)
+        product = await repo.get_product(variant.product_id) if variant else None
+        out.append({
+            "name": product.name_uz if product else "?",
+            "quantity": it.quantity,
+            "ring_size": it.ring_size,
+            "unit_price": _num(it.unit_price),
+            "engraving_text": it.engraving_text,
+        })
+    return out
+
+
+async def _resolve_latest_receipt_image(db: AsyncSession, conv: Conversation) -> tuple[str, str] | None:
+    """Mijozning oxirgi yuborgan RASMINI topib, uni public URL sifatida saqlaydi → (url, ext).
+
+    Telegram: attachment `file_id` → getFile → yuklab olish. Instagram: attachment `url` → yuklab olish.
+    Topilmasa/yuklab bo'lmasa None.
+    """
+    from sqlalchemy import select
+
+    from app.modules.files.service import save_bytes
+    from app.modules.inbox.models import Message
+
+    rows = (await db.execute(
+        select(Message)
+        .where(Message.conversation_id == conv.id, Message.direction == "incoming")
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )).scalars().all()
+
+    for msg in rows:
+        for att in (msg.attachments or []):
+            if not isinstance(att, dict):
+                continue
+            atype = (att.get("type") or "").lower()
+            if atype in ("photo", "image") or att.get("file_id") or att.get("url"):
+                data_ext = await _download_attachment(db, conv, att)
+                if data_ext is not None:
+                    data, ext = data_ext
+                    url = await save_bytes(data, ext)
+                    return url, ext
+    return None
+
+
+async def _download_attachment(db: AsyncSession, conv: Conversation, att: dict) -> tuple[bytes, str] | None:
+    """Bitta attachmentni baytlarga yuklab oladi (kanalga qarab). (bytes, ext) yoki None."""
+    import httpx
+
+    from app.core.config import get_settings as _gs
+
+    cfg = _gs()
+    timeout = cfg.http_timeout_seconds
+    try:
+        if conv.channel == "telegram" and att.get("file_id"):
+            from app.modules.integrations.service import get_config_value
+
+            token = await get_config_value(db, "telegram", "bot_token")
+            if not token:
+                return None
+            base = cfg.telegram_api_base_url.rstrip("/")
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.get(f"{base}/bot{token}/getFile", params={"file_id": att["file_id"]})
+                if r.status_code != 200 or not r.json().get("ok"):
+                    return None
+                file_path = r.json()["result"].get("file_path")
+                if not file_path:
+                    return None
+                fr = await client.get(f"{base}/file/bot{token}/{file_path}")
+                if fr.status_code != 200:
+                    return None
+                ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else "jpg"
+                return fr.content, ext
+        url = att.get("url")
+        if url:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                fr = await client.get(url)
+                if fr.status_code != 200:
+                    return None
+                ext = "jpg"
+                path = str(fr.url).split("?", 1)[0]
+                if "." in path.rsplit("/", 1)[-1]:
+                    ext = path.rsplit(".", 1)[-1].lower()
+                return fr.content, ext
+    except Exception:  # noqa: BLE001 — yuklab bo'lmasa jim None (AI qayta so'raydi)
+        return None
+    return None
+
+
 # ---------- Dispatcher ----------
 async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     db = ctx.db
@@ -467,8 +653,9 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             if not img:
                 skipped += 1  # rasmi yo'q — yuborilmaydi
                 continue
-            caption = f"{product.name_uz} — {int(product.effective_price)} so'm"
-            await inbox.send_media(ctx.conversation, img, caption=caption)
+            # Har rasm TAGIDA to'liq ma'lumot (nom, narx, material, tosh) — mijoz rasm+matnni birga ko'radi.
+            # Bir mahsulot = bitta rasm + bitta izoh; keyingisi alohida (ketma-ket) yuboriladi.
+            await inbox.send_media(ctx.conversation, img, caption=_image_caption(product))
             sent += 1
         return {"sent": sent, "skipped_no_image": skipped}
 
@@ -476,14 +663,18 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         from app.modules.inbox.models import Customer
 
         nm = (args.get("name") or "").strip()
-        if not nm:
+        phone = (args.get("phone") or "").strip()
+        if not nm and not phone:
             return {"saved": False}
         cust = await db.get(Customer, ctx.conversation.customer_id)
         if cust is None:
             return {"saved": False}
-        cust.full_name = nm[:255]
+        if nm:
+            cust.full_name = nm[:255]
+        if phone:
+            cust.phone = phone[:32]
         await db.commit()
-        return {"saved": True, "name": cust.full_name}
+        return {"saved": True, "name": cust.full_name, "phone": cust.phone}
 
     if name == "resolve_instagram_media":
         product = await catalog.resolve_instagram_media(args.get("link_or_ref", ""))
@@ -596,13 +787,60 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         url, _token, expires_at = await DeliveryService(db).create_checkout_link(uuid.UUID(args["order_id"]))
         return {"checkout_url": url, "expires_at": expires_at.isoformat()}
 
-    if name == "submit_payment":
+    if name == "get_order_summary":
+        from app.modules.delivery.repository import DeliveryRepository
+        from app.modules.inbox.models import Customer
+
+        order = await _resolve_order(db, ctx, args.get("order_id"))
+        if order is None:
+            return {"error": "Faol buyurtma topilmadi — avval create_order chaqiring."}
+        cust = await db.get(Customer, ctx.conversation.customer_id)
+        delivery = await DeliveryRepository(db).get_by_order(order.id)
+        has_location = bool(delivery and (delivery.address_text or (delivery.lat is not None)))
+        return {
+            "order_no": order.order_no,
+            "status": order.status,
+            "items": await _order_items_brief(db, order),
+            "items_total": _num(order.items_total),
+            "delivery_fee": _num(order.delivery_fee),
+            "delivery_zone": delivery.zone if delivery else None,
+            "grand_total": _num(order.grand_total),
+            "customer_name": cust.full_name if cust else None,
+            "customer_phone": cust.phone if cust else None,
+            "address": delivery.address_text if delivery else None,
+            "has_location": has_location,
+        }
+
+    if name == "get_order_status":
+        order = await _resolve_order(db, ctx, args.get("order_id"), latest=True)
+        if order is None:
+            return {"found": False, "note": "Mijozda buyurtma yo'q."}
+        return {
+            "found": True,
+            "order_no": order.order_no,
+            "status": order.status,
+            "status_text": _ORDER_STATUS_UZ.get(order.status, order.status),
+            "grand_total": _num(order.grand_total),
+        }
+
+    if name == "submit_receipt":
+        from app.modules.inbox.models import Customer
         from app.modules.payments.service import PaymentService
 
-        payment = await PaymentService(db).submit_payment(
-            uuid.UUID(args["order_id"]), args["receipt_url"], args["payer_name"]
-        )
-        return {"payment_id": str(payment.id), "status": payment.status}
+        order = await _resolve_order(db, ctx, args.get("order_id"))
+        if order is None:
+            return {"error": "Faol buyurtma topilmadi."}
+        image = await _resolve_latest_receipt_image(db, ctx.conversation)
+        if image is None:
+            return {"error": "Chek rasmi topilmadi — mijozdan to'lov chekining RASMINI yuborishini so'rang."}
+        receipt_url, _ext = image
+        payer = (args.get("payer_name") or "").strip()
+        if not payer:
+            cust = await db.get(Customer, ctx.conversation.customer_id)
+            payer = (cust.full_name if cust and cust.full_name else "Mijoz")
+        payment = await PaymentService(db).submit_payment(order.id, receipt_url, payer)
+        return {"payment_id": str(payment.id), "status": payment.status,
+                "note": "Chek to'lovga tasdiqlashga yuborildi. Operator tekshiradi."}
 
     if name == "handoff_to_operator":
         ctx.conversation.ai_state = AiState.handed_off.value

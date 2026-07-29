@@ -44,6 +44,17 @@ class OrdersRepository:
         )
         return res.scalar_one_or_none()
 
+    async def get_latest_order(self, customer_id: uuid.UUID) -> Order | None:
+        """Mijozning eng so'nggi buyurtmasi (har qanday statusда) — status so'rovi uchun."""
+        res = await self.db.execute(
+            select(Order)
+            .options(*_ORDER_LOADERS)
+            .where(Order.customer_id == customer_id)
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+        return res.scalar_one_or_none()
+
     async def list(
         self,
         *,

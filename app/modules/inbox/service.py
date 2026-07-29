@@ -174,6 +174,11 @@ class InboxService:
 
     async def send_media(self, conv: Conversation, image_url: str, caption: str | None = None) -> Message:
         """AI mahsulot rasmini yuboradi — chiquvchi xabar sifatida saqlanadi (delivery_status bilan)."""
+        # Rasm URL'ini tashqi (public) bazaga keltiramiz — aks holda IG/TG serveri localhost/ichki
+        # hostни ololmaydi va rasm "urli ketib" ko'rinmaydi (bug fix).
+        from app.core.media_url import public_media_url
+
+        image_url = public_media_url(image_url)
         # Guardrail: rasm caption'i ham AI chiqishi — taqiqlangan atama (masalan mahsulot
         # nomidagi "Diamond") to'g'ri atamaga almashadi (TZ 15). Matnli javob bilan bir xil qoida.
         if caption:

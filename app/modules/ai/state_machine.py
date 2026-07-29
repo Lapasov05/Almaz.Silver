@@ -33,7 +33,7 @@ def infer_next_state(current: AiState, used_tools: list[str]) -> AiState:
     """
     if "handoff_to_operator" in used_tools:
         return AiState.handed_off
-    if "submit_payment" in used_tools:
+    if "submit_payment" in used_tools or "submit_receipt" in used_tools:
         return AiState.payment_review
     if "get_payment_card" in used_tools:
         return AiState.awaiting_payment if can_transition(current, AiState.awaiting_payment) else current
