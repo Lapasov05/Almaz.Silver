@@ -158,13 +158,14 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "list_boxes",
             "description": (
-                "Mahsulot kategoriyasi uchun mavjud rangli qutilar (box) ro'yxati — mijoz qadoq/quti "
-                "so'raganda yoki taklif qilishdan oldin. Narx 0 = tekin. Faqat zaxirada borlari qaytadi."
+                "Rangli qutilar (box) ro'yxati — mijoz qadoq/quti/sovg'a qutisi so'raganda yoki taklif "
+                "qilishdan oldin. Aniq mahsulot bo'lsa `product_id` bering (o'sha kategoriya qutilari); "
+                "mijoz UMUMIY so'rasa (masalan 'qanday qutilaringiz bor') `product_id` SIZ ham chaqiring "
+                "(barcha qutilar qaytadi). Narx 0 = tekin. Faqat zaxirada borlari qaytadi."
             ),
             "parameters": {
                 "type": "object",
-                "properties": {"product_id": {"type": "string"}},
-                "required": ["product_id"],
+                "properties": {"product_id": {"type": "string", "description": "Ixtiyoriy — aniq mahsulot bo'lsa"}},
             },
         },
     },
@@ -324,6 +325,23 @@ async def _boxes_for_product(db: AsyncSession, product: Product) -> list[dict]:
     return [_box_brief(b) for b in boxes if b.available > 0]
 
 
+async def _all_boxes(db: AsyncSession) -> list[dict]:
+    """Barcha kategoriyalardagi faol+zaxirada qutilar, rang bo'yicha yagona (umumiy savol uchun)."""
+    if not bool(await _get_setting(db, "boxes_enabled", False)):
+        return []
+    seen: set[tuple] = set()
+    out: list[dict] = []
+    for b in await CatalogRepository(db).list_all_active_boxes():
+        if b.available <= 0:
+            continue
+        key = (b.name_uz, str(b.price))  # kategoriyalararo bir xil ranglarni takrorlamaymiz
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(_box_brief(b))
+    return out
+
+
 def _num(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
 
@@ -393,7 +411,10 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         return {"match_type": match_type, "products": [_product_brief(p, eng) for p, _ in results]}
 
     if name == "get_product_details":
-        product = await catalog.get_product(uuid.UUID(args["product_id"]))
+        try:
+            product = await catalog.get_product(uuid.UUID(str(args.get("product_id"))))
+        except (ValueError, TypeError):
+            return {"error": "product_id noto'g'ri — avval search_product bilan mahsulotni toping"}
         brief = _product_brief(product, await _engraving_settings(db))
         brief["description"] = product.description_uz
         brief["variants"] = [
@@ -415,10 +436,18 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         return brief
 
     if name == "list_boxes":
-        product = await CatalogRepository(db).get_product(uuid.UUID(args["product_id"]))
-        if product is None:
-            return {"boxes": [], "error": "mahsulot topilmadi"}
-        return {"boxes": await _boxes_for_product(db, product)}
+        # product_id IXTIYORIY: berilsa -> shu mahsulot kategoriyasi qutilari;
+        # berilmasa/xato bo'lsa -> barcha faol qutilar (mijoz umumiy so'raganda xato bermaydi).
+        raw = args.get("product_id")
+        product = None
+        if raw:
+            try:
+                product = await CatalogRepository(db).get_product(uuid.UUID(str(raw)))
+            except (ValueError, TypeError):
+                product = None
+        if product is not None:
+            return {"boxes": await _boxes_for_product(db, product)}
+        return {"boxes": await _all_boxes(db)}
 
     if name == "send_product_images":
         from app.modules.inbox.repository import InboxRepository

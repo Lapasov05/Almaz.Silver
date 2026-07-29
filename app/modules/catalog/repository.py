@@ -204,6 +204,16 @@ class CatalogRepository:
         )
         return list(res.scalars().all())
 
+    async def list_all_active_boxes(self) -> list[Box]:
+        """Barcha kategoriyalardagi faol boxlar (mijoz umumiy 'qanday qutilaringiz bor' deb so'raganda)."""
+        res = await self.db.execute(
+            select(Box)
+            .options(selectinload(Box.media))
+            .where(Box.deleted_at.is_(None), Box.is_active.is_(True))
+            .order_by(Box.sort_order, Box.name_uz)
+        )
+        return list(res.scalars().all())
+
     async def get_box_media(self, media_id: uuid.UUID) -> BoxMedia | None:
         return await self.db.get(BoxMedia, media_id)
 
