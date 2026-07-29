@@ -11,7 +11,8 @@ from dataclasses import dataclass, field
 # (pattern, to'g'ri almashtiruv, buzilish kodi)
 _RULES: list[tuple[re.Pattern, str, str]] = [
     (
-        re.compile(r"\b(olmos(lar)?|diamonds?|brilliant(lar)?|бриллиант\w*|олмос\w*)\b", re.IGNORECASE | re.UNICODE),
+        # O'zbekcha qo'shimchali shakllar ham (olmosga/olmosdek/brilliantga...) — \w* bilan tutamiz
+        re.compile(r"\b(olmos\w*|diamond\w*|brilliant\w*|бриллиант\w*|олмос\w*)\b", re.IGNORECASE | re.UNICODE),
         "serkon toshi",
         "forbidden_stone",
     ),
