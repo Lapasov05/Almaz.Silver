@@ -58,8 +58,8 @@ class PaymentService:
             await self.repo.add(payment)
         # rad etilgan bo'lsa qayta yuborish — yangilaymiz
         if card_id is None:
-            primary = await self.repo.get_primary_card()
-            card_id = primary.id if primary is not None else None
+            default = await self.repo.get_default_card()
+            card_id = default.id if default is not None else None
         payment.status = PaymentStatus.pending.value
         payment.receipt_url = receipt_url
         payment.payer_name = payer_name

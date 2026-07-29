@@ -70,6 +70,15 @@ class PaymentRepository:
         )
         return res.scalars().first()
 
+    async def get_default_card(self) -> PaymentCard | None:
+        """To'lov uchun karta: primary bo'lsa o'sha, aks holda birinchi faol karta (chidamli)."""
+        res = await self.db.execute(
+            select(PaymentCard)
+            .where(PaymentCard.is_active.is_(True))
+            .order_by(PaymentCard.is_primary.desc(), PaymentCard.created_at.desc())
+        )
+        return res.scalars().first()
+
     async def clear_primary(self) -> None:
         """Barcha kartalardan is_primary ni olib tashlaydi (bitta primary bo'lishi uchun)."""
         res = await self.db.execute(select(PaymentCard).where(PaymentCard.is_primary.is_(True)))

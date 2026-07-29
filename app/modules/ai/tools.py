@@ -470,9 +470,9 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     if name == "get_payment_card":
         from app.modules.payments.repository import PaymentRepository
 
-        card = await PaymentRepository(db).get_primary_card()
+        card = await PaymentRepository(db).get_default_card()
         if card is None:
-            return {"error": "Asosiy karta sozlanmagan"}
+            return {"error": "To'lov kartasi sozlanmagan"}
         return {
             "holder_name": card.holder_name,
             "card_number_masked": card.card_number_masked,
