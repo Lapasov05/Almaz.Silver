@@ -174,6 +174,12 @@ class InboxService:
 
     async def send_media(self, conv: Conversation, image_url: str, caption: str | None = None) -> Message:
         """AI mahsulot rasmini yuboradi — chiquvchi xabar sifatida saqlanadi (delivery_status bilan)."""
+        # Guardrail: rasm caption'i ham AI chiqishi — taqiqlangan atama (masalan mahsulot
+        # nomidagi "Diamond") to'g'ri atamaga almashadi (TZ 15). Matnli javob bilan bir xil qoida.
+        if caption:
+            from app.modules.ai.guardrail import enforce
+
+            caption = enforce(caption).text
         conv.last_message = caption or "[rasm]"
         conv.last_activity_at = _utcnow()
         message = Message(
