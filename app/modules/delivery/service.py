@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.exceptions import AppError, NotFoundError
-from app.modules.delivery.geo import is_in_tashkent, nearest_branch
+from app.modules.delivery.geo import branches_by_distance, is_in_tashkent
 from app.modules.delivery.models import (
     CheckoutToken,
     CustomerLocation,
@@ -108,27 +108,54 @@ class DeliveryService:
             "zones": await self._zone_fees(),
         }
 
-    async def resolve_checkout(
+    # Tumandagi filial kam bo'lsa — viloyat darajasiga kengaytirish chegarasi
+    _MIN_DISTRICT_BRANCHES = 3
+
+    async def _candidate_branches(self, lat: Decimal, lng: Decimal) -> list[tuple]:
+        """Mijozning viloyat+tumanidagi filiallar (masofa bo'yicha). Tumanda kam bo'lsa viloyatga
+        kengaytiriladi. Qaytadi: [(branch, masofa_km), ...] yaqindan uzoqqa."""
+        branches = await self.repo.list_active_bts_branches()
+        if not branches:
+            return []
+        ranked = branches_by_distance(float(lat), float(lng), branches)
+        ref = ranked[0][0]  # eng yaqin filial → mijoz viloyat/tumanini shu belgilaydi
+        in_district = [(b, d) for b, d in ranked if b.region == ref.region and b.district == ref.district]
+        if len(in_district) < self._MIN_DISTRICT_BRANCHES:  # kam bo'lsa — butun viloyat
+            in_district = [(b, d) for b, d in ranked if b.region == ref.region]
+        return in_district
+
+    async def preview_location(self, raw_token: str, lat: Decimal | None, lng: Decimal | None) -> dict:
+        """1-qadam: zona + narx + (BTS bo'lsa) filiallar ro'yxati. Token YOPILMAYDI, DB o'zgarmaydi."""
+        token = await self._validate_token(raw_token)  # faqat tekshiradi, yopmaydi
+        order = await self.orders.get(token.order_id)
+        if lat is None or lng is None:
+            raise AppError("Lokatsiya (lat/lng) yuborilishi shart")
+        if is_in_tashkent(float(lat), float(lng)):
+            fee = await self._fee_for_zone(DeliveryZone.tashkent.value)
+            return {"order": order, "location_type": LocationType.toshkent, "fee": fee, "branches": []}
+        fee = await self._fee_for_zone(DeliveryZone.region.value)
+        return {"order": order, "location_type": LocationType.bts, "fee": fee,
+                "branches": await self._candidate_branches(lat, lng)}
+
+    async def confirm_location(
         self,
         raw_token: str,
         *,
         lat: Decimal | None = None,
         lng: Decimal | None = None,
+        bts_branch_id: uuid.UUID | None = None,
         address_text: str | None = None,
         phone: str | None = None,
         landmark: str | None = None,
         apartment: str | None = None,
-        zone: str | None = None,  # legacy — endi lat/lng'dan aniqlanadi
     ) -> Delivery:
-        """Frontend map'dan kelgan lat/lng'ni buyurtmaga bog'laydi (TZ 11).
+        """2-qadam: lat/lng + (BTS bo'lsa) TANLANGAN filialni buyurtmaga bog'laydi, token yopadi (TZ 11).
 
-        - Toshkent ichida → type=Toshkent, narx 50k, mijoz lat/lng saqlanadi.
-        - Tashqarida → type=BTS, narx 30k, eng yaqin BTS filiali biriktiriladi.
-        Mijoz lokatsiyasi `customer_location` (id bilan) saqlanadi; token bir martalik yopiladi.
+        Toshkent → type=Toshkent (50k). BTS → type=BTS (30k), `bts_branch_id` MAJBURIY (mijoz tanlagan).
+        Mijoz lokatsiyasi `customer_location` (id bilan) saqlanadi.
         """
         token = await self._validate_token(raw_token)
         order = await self.orders.get(token.order_id)
-
         if lat is None or lng is None:
             raise AppError("Lokatsiya (lat/lng) yuborilishi shart")
 
@@ -137,7 +164,6 @@ class DeliveryService:
             delivery = Delivery(order_id=token.order_id)
             await self.repo.add(delivery)
 
-        # --- Zona / tur aniqlash ---
         if is_in_tashkent(float(lat), float(lng)):
             location_type = LocationType.toshkent
             resolved_zone = DeliveryZone.tashkent.value
@@ -149,10 +175,11 @@ class DeliveryService:
             resolved_zone = DeliveryZone.region.value
             provider = DeliveryProvider.bts.value
             fee = await self._fee_for_zone(resolved_zone)
-            # Eng yaqin BTS filiali (koordinata bo'yicha)
-            branches = await self.repo.list_active_bts_branches()
-            nb = nearest_branch(float(lat), float(lng), branches)
-            branch = nb[0] if nb else None
+            if bts_branch_id is None:
+                raise AppError("BTS filialini tanlang (bts_branch_id majburiy)")
+            branch = await self.repo.get_bts_branch(bts_branch_id)
+            if branch is None or not branch.is_active:
+                raise AppError("Tanlangan BTS filiali topilmadi")
 
         # --- Mijoz lokatsiyasini saqlaymiz (id bilan, qayta ishlatiladi) ---
         loc = CustomerLocation(
@@ -192,6 +219,22 @@ class DeliveryService:
         token.used = True  # one-time use
         await self.db.commit()
         return delivery
+
+    async def resolve_checkout(self, raw_token: str, *, lat=None, lng=None, address_text=None,
+                               phone=None, landmark=None, apartment=None, zone=None) -> Delivery:
+        """Bir qadamli qulaylik (compat): BTS bo'lsa ENG YAQIN filial avtomatik tanlanadi.
+
+        Frontend 2 qadamli oqim (preview→confirm)ni ishlatadi; bu CRM/eski chaqiruvlar uchun.
+        """
+        bts_branch_id = None
+        if lat is not None and lng is not None and not is_in_tashkent(float(lat), float(lng)):
+            cands = await self._candidate_branches(lat, lng)
+            if cands:
+                bts_branch_id = cands[0][0].id  # eng yaqin
+        return await self.confirm_location(
+            raw_token, lat=lat, lng=lng, bts_branch_id=bts_branch_id,
+            address_text=address_text, phone=phone, landmark=landmark, apartment=apartment,
+        )
 
     # ---------- CRM ----------
     async def get_by_order(self, order_id: uuid.UUID) -> Delivery:

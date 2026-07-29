@@ -27,15 +27,19 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 def nearest_branch(lat: float, lng: float, branches: list) -> tuple[object, float] | None:
     """Berilgan nuqtaga eng yaqin BTS filialini qaytaradi: (branch, masofa_km). Bo'sh bo'lsa None."""
-    best = None
-    best_d = float("inf")
+    ranked = branches_by_distance(lat, lng, branches)
+    return ranked[0] if ranked else None
+
+
+def branches_by_distance(lat: float, lng: float, branches: list) -> list[tuple[object, float]]:
+    """Filiallarni masofa bo'yicha saralab (yaqindan uzoqqa) qaytaradi: [(branch, masofa_km), ...]."""
+    out = []
     for b in branches:
         if b.lat is None or b.lng is None:
             continue
-        d = haversine_km(lat, lng, float(b.lat), float(b.lng))
-        if d < best_d:
-            best, best_d = b, d
-    return (best, best_d) if best is not None else None
+        out.append((b, haversine_km(lat, lng, float(b.lat), float(b.lng))))
+    out.sort(key=lambda x: x[1])
+    return out
 
 
 def to_float(value: Decimal | float | None) -> float | None:

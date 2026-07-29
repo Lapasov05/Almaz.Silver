@@ -38,6 +38,43 @@ class BtsBranchOut(BaseModel):
     lng: Decimal
 
 
+class BtsBranchWithDistanceOut(BtsBranchOut):
+    """BTS filiali + mijoz nuqtasiga masofa (km) — ro'yxatni yaqindan uzoqqa ko'rsatish uchun."""
+
+    distance_km: float
+
+
+class LocationResolveIn(BaseModel):
+    """1-qadam: mijoz xaritada belgilagan nuqta (token yopilmaydi)."""
+
+    lat: Decimal
+    lng: Decimal
+
+
+class LocationResolveOut(BaseModel):
+    """1-qadam natijasi: zona + narx + (BTS bo'lsa) tanlash uchun filiallar ro'yxati."""
+
+    order_no: str
+    location_type: LocationType             # Toshkent | BTS
+    delivery_fee: Decimal
+    items_total: Decimal
+    grand_total: Decimal                    # items_total + delivery_fee (oldindan ko'rsatish)
+    requires_branch_selection: bool         # BTS bo'lsa true — mijoz filial tanlashi kerak
+    branches: list[BtsBranchWithDistanceOut]  # Toshkent bo'lsa bo'sh
+
+
+class LocationConfirmIn(BaseModel):
+    """2-qadam: mijoz filialni tanlab (BTS bo'lsa) tasdiqlaydi — token yopiladi."""
+
+    lat: Decimal
+    lng: Decimal
+    bts_branch_id: uuid.UUID | None = None   # BTS bo'lsa MAJBURIY (tanlangan filial)
+    address_text: str | None = Field(default=None, max_length=500)
+    phone: str | None = Field(default=None, max_length=32)
+    landmark: str | None = Field(default=None, max_length=255)
+    apartment: str | None = Field(default=None, max_length=255)
+
+
 class DeliveryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -95,6 +95,28 @@ async def main():
         if branch:
             check(branch.region == "Samarqand", f"Eng yaqin filial Samarqandda: {branch.name} ({branch.region})")
 
+        print("\n── 4b) IKKI QADAM: preview_location (ro'yxat) → confirm_location (tanlash) ──")
+        rord2 = await dispatch("create_order", {"items": [{"variant_id": v2, "quantity": 1, "ring_size": "16"}]}, ctx)
+        _u, raw3, _e = await DeliveryService(db).create_checkout_link(uuid.UUID(rord2["order_id"]))
+        prev = await DeliveryService(db).preview_location(raw3, Decimal("39.654"), Decimal("66.959"))
+        check(prev["location_type"].value == "BTS" and len(prev["branches"]) >= 1,
+              f"preview: BTS + filiallar ro'yxati ({len(prev['branches'])} ta)")
+        dists = [d for _b, d in prev["branches"]]
+        check(dists == sorted(dists), "preview: masofa bo'yicha saralangan")
+        # Filialsiz confirm (BTS) → xato
+        from app.core.exceptions import AppError
+        try:
+            await DeliveryService(db).confirm_location(raw3, lat=Decimal("39.654"), lng=Decimal("66.959"))
+            check(False, "BTS'да filialsiz confirm → xato kutilgan edi")
+        except AppError:
+            check(True, "BTS'да filialsiz confirm → AppError (to'g'ri)")
+        # Ro'yxatdan 2-filialni tanlab confirm
+        chosen = prev["branches"][1][0] if len(prev["branches"]) > 1 else prev["branches"][0][0]
+        dlv3 = await DeliveryService(db).confirm_location(
+            raw3, lat=Decimal("39.654"), lng=Decimal("66.959"), bts_branch_id=chosen.id, address_text="Samarqand")
+        check(dlv3.bts_branch_id == chosen.id and float(dlv3.fee) == 30000,
+              f"TANLANGAN filial saqlandi ({chosen.name}), 30k")
+
         print("\n── 5) get_order_summary → location_type + bts_branch ──")
         summ = await dispatch("get_order_summary", {}, ctx)
         check(summ.get("location_type") == "BTS", f"summary location_type=BTS ({summ.get('location_type')})")
