@@ -29,6 +29,21 @@ class OrdersRepository:
         res = await self.db.execute(select(Order.id).where(Order.order_no == order_no))
         return res.scalar_one_or_none() is not None
 
+    # Double-order himoyasi: mijozning faol (hali to'lanmagan/yakunlanmagan) buyurtmasi.
+    # Bu holatlar zaxirани band qilib turadi — AI yangi buyurtма yaratmasin, shuni davom ettirsin.
+    _ACTIVE_STATUSES = ("draft", "pending", "waiting_payment", "payment_review")
+
+    async def get_active_order(self, customer_id: uuid.UUID) -> Order | None:
+        """Mijozning eng so'nggi faol (to'lanmagan) buyurtmasi; yo'q bo'lsa None."""
+        res = await self.db.execute(
+            select(Order)
+            .options(*_ORDER_LOADERS)
+            .where(Order.customer_id == customer_id, Order.status.in_(self._ACTIVE_STATUSES))
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+        return res.scalar_one_or_none()
+
     async def list(
         self,
         *,

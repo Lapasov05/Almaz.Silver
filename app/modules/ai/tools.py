@@ -511,8 +511,24 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         return {"results": [{"type": e.type, "title": e.title, "content": e.content} for e in entries]}
 
     if name == "create_order":
+        from app.modules.orders.repository import OrdersRepository
         from app.modules.orders.schemas import OrderItemCreate
         from app.modules.orders.service import OrdersService
+
+        # Double-order himoyasi: mijozда allaqачон faol (to'lanmagan) buyurtма bo'lsa,
+        # yangi yaratmaymiz — mavjudini qaytaramiz (AI shu bilan davom etadi: manzil/to'lov).
+        existing = await OrdersRepository(db).get_active_order(ctx.conversation.customer_id)
+        if existing is not None:
+            return {
+                "order_id": str(existing.id),
+                "order_no": existing.order_no,
+                "status": existing.status,
+                "items_total": _num(existing.items_total),
+                "grand_total": _num(existing.grand_total),
+                "already_exists": True,
+                "note": "Mijozda allaqachon faol buyurtma bor — yangisi yaratilmadi. "
+                        "Shu buyurtма bilan davom eting (manzil so'rang yoki to'lovga o'ting).",
+            }
 
         repo = CatalogRepository(db)
         items = []
