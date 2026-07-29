@@ -318,6 +318,41 @@ async def _get_setting(db: AsyncSession, key: str, default: Any = None) -> Any:
     return setting.value if setting is not None else default
 
 
+async def _resolve_variant_id(repo, catalog, raw):
+    """AI bergan 'variant_id'ni haqiqiy variant id'ga hal qiladi (chidamli).
+
+    Qabul qiladi: variant UUID | product UUID | mahsulot nomi/matn. Topilmasa None.
+    (AI ba'zan variant_id o'rniga product_id, nom yoki buzuq UUID yuboradi.)
+    """
+    if not raw:
+        return None
+    raw = str(raw).strip()
+    try:
+        vid = uuid.UUID(raw)
+    except (ValueError, TypeError):
+        vid = None
+    if vid is not None:
+        if await repo.get_variant(vid) is not None:
+            return vid
+        product = await repo.get_product(vid)  # product_id yuborilgan bo'lsa -> default variant
+        if product is not None:
+            active = [v for v in product.variants if v.is_active and v.deleted_at is None]
+            if active:
+                return active[0].id
+        return None
+    # UUID emas — mahsulot nomi/matn bo'yicha qidiramiz
+    try:
+        _mt, results = await catalog.search(q=raw, limit=1)
+    except Exception:  # noqa: BLE001
+        results = []
+    if results:
+        p = results[0][0]
+        active = [v for v in p.variants if v.is_active and v.deleted_at is None]
+        if active:
+            return active[0].id
+    return None
+
+
 # ---------- Dispatcher ----------
 async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     db = ctx.db
@@ -454,20 +489,22 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         repo = CatalogRepository(db)
         items = []
         for it in args.get("items", []):
-            vid = uuid.UUID(it["variant_id"])
-            # AI ba'zan variant_id o'rniga product_id yuboradi — chidamli: product bo'lsa default varianti
-            if await repo.get_variant(vid) is None:
-                product = await repo.get_product(vid)
-                if product is not None:
-                    active = [v for v in product.variants if v.is_active and v.deleted_at is None]
-                    if active:
-                        vid = active[0].id
+            vid = await _resolve_variant_id(repo, catalog, it.get("variant_id"))
+            if vid is None:
+                return {"error": f"Mahsulot/variant topilmadi: {it.get('variant_id')!r}. "
+                                 f"Avval search_product bilan toping va default_variant_id ni bering."}
+            box_id = None
+            if it.get("box_id"):
+                try:
+                    box_id = uuid.UUID(str(it["box_id"]))
+                except (ValueError, TypeError):
+                    box_id = None
             items.append(OrderItemCreate(
                 variant_id=vid,
                 quantity=int(it.get("quantity", 1)),
                 ring_size=it.get("ring_size"),
                 engraving_text=it.get("engraving_text"),
-                box_id=uuid.UUID(it["box_id"]) if it.get("box_id") else None,
+                box_id=box_id,
             ))
         order = await OrdersService(db).create_order(
             ctx.conversation.customer_id, items, created_by_ai=True
