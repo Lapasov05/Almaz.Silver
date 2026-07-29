@@ -235,6 +235,21 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "save_customer_name",
+            "description": (
+                "Mijoz o'z ISMINI (yoki ism-familiyasini) aytsa, uni saqlaydi — CRM'da 'Mijoz' o'rniga "
+                "ismi ko'rinadi va keyingi murojaatlarda ism bilan gaplashiladi. Faqat haqiqiy ism berilganda."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string", "description": "Mijozning ismi yoki ism-familiyasi"}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "handoff_to_operator",
             "description": "Suhbatni jonli operatorga o'tkazish (o'zi hal qila olmaganda).",
             "parameters": {
@@ -427,6 +442,19 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             await inbox.send_media(ctx.conversation, img, caption=caption)
             sent += 1
         return {"sent": sent, "skipped_no_image": skipped}
+
+    if name == "save_customer_name":
+        from app.modules.inbox.models import Customer
+
+        nm = (args.get("name") or "").strip()
+        if not nm:
+            return {"saved": False}
+        cust = await db.get(Customer, ctx.conversation.customer_id)
+        if cust is None:
+            return {"saved": False}
+        cust.full_name = nm[:255]
+        await db.commit()
+        return {"saved": True, "name": cust.full_name}
 
     if name == "resolve_instagram_media":
         product = await catalog.resolve_instagram_media(args.get("link_or_ref", ""))

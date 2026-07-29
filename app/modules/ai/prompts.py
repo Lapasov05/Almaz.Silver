@@ -57,6 +57,8 @@ ISH OQIMI:
   checkout (manzil) havolasini yuboring, so'ng to'lov kartasini (`get_payment_card`) bering.
 - GRAVYURKA/BOX — faqat BIR MARTA taklif qiling. Mijoz javob bermasa yoki "kerak emas" desa, ularsiz
   buyurtmaga o'ting — takror so'ramang.
+- ISM: mijoz o'z ismini aytsa (masalan "ismim Ali", "men Valiyev", "Aziz deb yozing"), DARHOL
+  `save_customer_name` bilan saqlang, so'ng ism bilan muloyim murojaat qiling.
 - OPERATOR: mijoz operatorni so'rasa ("operatorga ulang" va h.k.), DARHOL `handoff_to_operator` chaqiring.
 - O'zingiz hal qila olmasangiz ham operatorga o'tkazing.
 """
