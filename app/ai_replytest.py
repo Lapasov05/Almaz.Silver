@@ -16,6 +16,7 @@ import asyncio
 import os
 import traceback
 
+import app.core.models_registry  # noqa: F401 — barcha model (user FK) ro'yxatga olinadi
 from sqlalchemy import select
 
 from app.core.database import SessionLocal
