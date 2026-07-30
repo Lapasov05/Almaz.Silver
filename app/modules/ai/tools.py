@@ -915,7 +915,10 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 "note": "Chek to'lovga tasdiqlashga yuborildi. Operator tekshiradi."}
 
     if name == "handoff_to_operator":
+        # AI to'xtaydi (ai_enabled=False) — operator qo'lga oladi. Aks holda AI javob beraverib,
+        # suhbat operatorga o'tmaydi. Operator inbox'da ai_state=handed_off bo'yicha ko'radi.
         ctx.conversation.ai_state = AiState.handed_off.value
+        ctx.conversation.ai_enabled = False
         return {"status": "handed_off", "reason": args.get("reason")}
 
     return {"error": f"noma'lum tool: {name}"}

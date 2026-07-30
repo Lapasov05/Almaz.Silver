@@ -295,10 +295,11 @@ class Agent:
                 text = result.content or ""
                 break
             else:
-                # Sikl tugadi — operatorga o'tkazamiz
+                # Sikl tugadi — operatorga o'tkazamiz (AI to'xtaydi, operator qo'lga oladi)
                 text = "Kechirasiz, so'rovingizni to'liq bajara olmadim. Operator tez orada bog'lanadi."
                 used_tools.append("handoff_to_operator")
                 conv.ai_state = AiState.handed_off.value
+                conv.ai_enabled = False
         except Exception as exc:  # noqa: BLE001
             # LLM/OpenAI xatosi 500 bermasin — jim skip + logда to'liq traceback + reason'да sabab
             logger.exception("AI javob berolmadi — LLM xatosi (conv=%s)", conv.id)
