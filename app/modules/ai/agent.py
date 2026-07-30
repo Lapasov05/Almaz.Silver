@@ -50,7 +50,7 @@ async def _instagram_context(db, conv) -> str | None:
     from sqlalchemy import select
 
     from app.modules.catalog.repository import CatalogRepository
-    from app.modules.catalog.search import is_instagram_url
+    from app.modules.catalog.search import extract_instagram_ref, is_instagram_url
     from app.modules.catalog.service import CatalogService
     from app.modules.inbox.models import Message
 
@@ -64,8 +64,17 @@ async def _instagram_context(db, conv) -> str | None:
         return None
     ref = None
     for att in (latest.attachments or []):
-        if isinstance(att, dict) and att.get("type") == "ig_story" and att.get("story_ref"):
+        if not isinstance(att, dict):
+            continue
+        # Bizning story'ga javob (reply_to.story) — media_id
+        if att.get("type") == "ig_story" and att.get("story_ref"):
             ref = att["story_ref"]
+            break
+        # Mijoz postni/reelni ULASHsa: attachment url = IG permalink (share/ig_reel/story_mention).
+        # Faqat haqiqiy /p/·/reel/·/stories/ havolasini olamiz (rasm CDN url'ini emas).
+        url = att.get("url")
+        if url and extract_instagram_ref(url) is not None:
+            ref = url
             break
     if ref is None and latest.content and is_instagram_url(latest.content):
         ref = latest.content

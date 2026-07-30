@@ -54,8 +54,12 @@ def extract_shortcode(value: str) -> str | None:
     return None
 
 
+# instagram.com hostini aniqlaydi; cdninstagram.com (rasm CDN) ni FALSE beradi (host oldida . yoki // bo'lishi shart).
+_IG_HOST_RE = re.compile(r"(^|//|\.)instagram\.com/", re.IGNORECASE)
+
+
 def is_instagram_url(value: str) -> bool:
-    return bool(value) and "instagram.com/" in value.lower()
+    return bool(value) and bool(_IG_HOST_RE.search(value))
 
 
 def slugify(value: str) -> str:
