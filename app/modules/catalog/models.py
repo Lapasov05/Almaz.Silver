@@ -192,6 +192,13 @@ class Product(UUIDMixin, TimestampMixin, Base):
         """Bu mahsulotга buyurtmada o'lcham kerakmi (kategoriyadan). Universal bo'lsa False."""
         return bool(self.category and self.category.requires_ring_size)
 
+    @property
+    def available_sizes(self) -> list | None:
+        """Kategoriyaga bog'langan mavjud o'lchamlar (uzuk bo'lsa). Bo'sh/universal -> None."""
+        if self.requires_ring_size and self.category is not None:
+            return self.category.available_sizes
+        return None
+
 
 class Variant(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "variant"

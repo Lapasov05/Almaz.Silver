@@ -328,6 +328,7 @@ class ProductOut(BaseModel):
     low_stock_threshold: int | None
     available: int                  # umumiy mavjud zaxira
     requires_ring_size: bool        # buyurtmada o'lcham kerakmi (kategoriyadan)
+    available_sizes: list[str] | None  # kategoriyaga bog'langan o'lchamlar (uzuk bo'lsa); bo'sh -> cheklovsiz
     gender: ReferenceOut | None
     material: ReferenceOut | None
     stone: ReferenceOut | None
