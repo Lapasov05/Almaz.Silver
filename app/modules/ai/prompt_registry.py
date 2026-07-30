@@ -154,6 +154,16 @@ def default_text(key: str) -> str:
     return entry["value"] if entry else ""
 
 
+def prompt_meta(key: str) -> dict | None:
+    """Bitta promt metama'lumoti (key/purpose/used_in/placeholders/value). Yo'q bo'lsa None."""
+    return _BY_KEY.get(key)
+
+
+def all_prompt_keys() -> list[str]:
+    """Registrdagi barcha promt kalitlari (tartib bo'yicha)."""
+    return [p["key"] for p in AI_PROMPTS]
+
+
 async def get_ai_text(db, key: str, **fmt) -> str:
     """AI matnini oladi: avval DB (settings), bo'lmasa registr standarti. `fmt` berilsa .format bilan to'ldiradi.
 

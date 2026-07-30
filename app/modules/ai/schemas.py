@@ -34,6 +34,21 @@ class PromptOut(BaseModel):
     system_prompt: str
 
 
+class AiPromptOut(BaseModel):
+    """Bitta AI promt — metama'lumot (maqsad/qayerda/o'rinlar) + standart va joriy qiymat."""
+    key: str
+    purpose: str
+    used_in: str
+    placeholders: str
+    default_value: str      # registrdagi standart (kod fallback)
+    current_value: str      # hozir amalda bo'lgan (DB'da bo'lsa o'sha, aks holda default)
+    is_overridden: bool     # DB'da tahrirlanganmi (True = default emas)
+
+
+class AiPromptUpdate(BaseModel):
+    value: str = Field(min_length=1)
+
+
 class AgentRespondOut(BaseModel):
     status: str
     reason: str | None = None

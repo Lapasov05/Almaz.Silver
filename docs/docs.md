@@ -201,3 +201,62 @@ qilinmasa kod registr standartини ishlatadi (AI baribir ishlaydi); seed faqat
 
 > Eslatma: eski `system_prompt_override` sozlamasi hali ham ishlaydi (to'ldirilsa `ai_system_prompt`dan
 > ustun keladi) — moslik uchun.
+
+## AI Promtlarni boshqarish API (FRONTEND uchun)
+
+Frontend promt-editor sahifasi shu 4 endpointни ishlatadi. Bazaviy URL: `https://almaz.api.cognilabs.org`.
+Auth: `Authorization: Bearer <access_token>`. Ruxsatlar: o'qish `ai:view`, tahrirlash `ai:edit_prompt`.
+
+> Nega alohida (nega oddiy `/settings` emas): bu endpoint har promt bilan birga METAMA'LUMOTni
+> (maqsad, qayerda ishlatiladi, o'rinlar, standart qiymat) qaytaradi — editorda "bu promt nima
+> qiladi" ko'rinib tursin. Promtlar oldindan belgilangan ro'yxat (16 ta) — yangi qo'shish/o'chirish yo'q,
+> faqat **tahrirlash** va **standartga qaytarish**.
+
+### `AiPromptOut` (javob obyekti)
+```json
+{
+  "key": "ai_msg_fallback",
+  "purpose": "AI tool-sikli tugab... operatorga o'tkaziladi",   // NIMA UCHUN
+  "used_in": "app/modules/ai/agent.py::respond (sikl tugagani)", // QAYERDA
+  "placeholders": "",                    // shablon o'rinlari (masalan "{order_no} {grand_total}"); bo'lsa saqlang
+  "default_value": "Kechirasiz, ...",    // registr standarti (reset shunga qaytaradi)
+  "current_value": "Kechirasiz, ...",    // hozir amalda (DB'da bo'lsa o'sha, aks holda default)
+  "is_overridden": false                 // true = tahrirlangan (default emas)
+}
+```
+
+### 1) Barcha promtlar ro'yxati — `GET /ai/prompts`
+Ruxsat: `ai:view`. Javob `200`: `AiPromptOut[]` (16 ta). Editor ro'yxatini shu bilan chizasiz
+(har qatorda `key` + `purpose`; `is_overridden=true` bo'lsa "tahrirlangan" belgisi).
+
+### 2) Bitta promt — `GET /ai/prompts/{key}`
+Ruxsat: `ai:view`. Javob `200`: bitta `AiPromptOut`. Kalit registrda yo'q → `404 {"detail":"AI promt topilmadi: {key}"}`.
+
+### 3) Tahrirlash — `PUT /ai/prompts/{key}`
+Ruxsat: `ai:edit_prompt`. Body: `{ "value": "yangi matn" }` (`value` bo'sh bo'lmasin — `min_length=1`).
+Javob `200`: yangilangan `AiPromptOut` (`current_value` = yangi, `is_overridden=true`). Kalit yo'q → `404`.
+Bo'sh `value` → `422`.
+
+> **Placeholder ogohlantirishi (MUHIM):** agar `placeholders` bo'sh bo'lmasa (masalan `ai_ctx_order`:
+> `{order_no} {products} {grand_total} ...`) — tahrirda o'sha `{nom}`larni AYNAN saqlang, kod ularni
+> to'ldiradi. Yo'qotsangiz kontekst noto'g'ri chiqadi (lekin tizim buzilmaydi — mos kelmasa xom matn beriladi).
+> `ai_system_prompt` bundan mustasno — u `.format` QILINMAYDI, ichidagi `{months}` kabi misollar xavfsiz.
+
+### 4) Standartga qaytarish — `POST /ai/prompts/{key}/reset`
+Ruxsat: `ai:edit_prompt`. Body yo'q. DB'dagi tahrirni o'chiradi → `current_value` registr standartiga qaytadi
+(`is_overridden=false`). Javob `200`: `AiPromptOut`. Kalit yo'q → `404`.
+
+### Xatolar
+| Holat | HTTP | detail |
+|---|---|---|
+| Kalit registrda yo'q | 404 | "AI promt topilmadi: {key}" |
+| Bo'sh value (PUT) | 422 | FastAPI validatsiya |
+| Ruxsat yo'q | 403 | `ai:view` / `ai:edit_prompt` kerak |
+| Token yo'q/eskirgan | 401 | — |
+
+### Tavsiya etilgan frontend oqimi
+1. `GET /ai/prompts` → ro'yxat (kalit + maqsad; tahrirlanganlarni belgila).
+2. Qatorni bosganda `current_value` ni textarea'da ko'rsat + `purpose`/`used_in`/`placeholders` ni yon panelда.
+3. **Saqlash** → `PUT /ai/prompts/{key}`. **Standartga qaytarish** → `POST /ai/prompts/{key}/reset`
+   (avval `default_value` bilan taqqoslab, "o'zgargan" tugmasini faollashtir).
+4. O'zgarish darhol kuchga kiradi — keyingi AI javobi yangi matnni ishlatadi (deploy shart emas).

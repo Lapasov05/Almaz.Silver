@@ -28,3 +28,12 @@ class SettingsRepository:
             setting.value = value
         await self.db.flush()
         return setting
+
+    async def delete(self, key: str) -> bool:
+        """Sozlamani o'chiradi (masalan AI promtni default'ga qaytarish). Yo'q bo'lsa False."""
+        setting = await self.get(key)
+        if setting is None:
+            return False
+        await self.db.delete(setting)
+        await self.db.flush()
+        return True

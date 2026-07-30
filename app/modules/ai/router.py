@@ -9,11 +9,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_permission
+from app.core.exceptions import NotFoundError
 from app.core.pagination import Page, PageParams, page_params
+from app.modules.ai.prompt_registry import AI_PROMPTS, get_ai_text, prompt_meta
 from app.modules.ai.prompts import build_system_prompt
 from app.modules.ai.repository import KnowledgeRepository
 from app.modules.ai.schemas import (
     AgentRespondOut,
+    AiPromptOut,
+    AiPromptUpdate,
     KnowledgeCreate,
     KnowledgeOut,
     KnowledgeType,
@@ -94,8 +98,76 @@ async def get_prompt(db: AsyncSession = Depends(get_db)) -> PromptOut:
     version_setting = await repo.get("prompt_version")
     override_setting = await repo.get("system_prompt_override")
     version = int(version_setting.value) if version_setting else 1
+    base = await get_ai_text(db, "ai_system_prompt")  # DB (registr) asosiy prompt
     override = override_setting.value if override_setting else None
-    return PromptOut(prompt_version=version, system_prompt=build_system_prompt(version, override))
+    return PromptOut(prompt_version=version, system_prompt=build_system_prompt(version, base, override))
+
+
+# ==================== AI Promtlar — to'liq boshqaruv (registr + DB) ====================
+async def _build_ai_prompt_out(db: AsyncSession, key: str) -> AiPromptOut:
+    meta = prompt_meta(key)
+    if meta is None:
+        raise NotFoundError(f"AI promt topilmadi: {key}")
+    setting = await SettingsRepository(db).get(key)
+    return AiPromptOut(
+        key=key,
+        purpose=meta["purpose"],
+        used_in=meta["used_in"],
+        placeholders=meta.get("placeholders", ""),
+        default_value=meta["value"],
+        current_value=(setting.value if (setting is not None and setting.value) else meta["value"]),
+        is_overridden=setting is not None,
+    )
+
+
+@router.get(
+    "/prompts",
+    response_model=list[AiPromptOut],
+    dependencies=[Depends(require_permission("ai:view"))],
+)
+async def list_ai_prompts(db: AsyncSession = Depends(get_db)) -> list[AiPromptOut]:
+    """Barcha AI promtlar — metama'lumot (maqsad/qayerda/o'rinlar) + standart va joriy qiymat bilan."""
+    return [await _build_ai_prompt_out(db, p["key"]) for p in AI_PROMPTS]
+
+
+@router.get(
+    "/prompts/{key}",
+    response_model=AiPromptOut,
+    dependencies=[Depends(require_permission("ai:view"))],
+)
+async def get_ai_prompt(key: str, db: AsyncSession = Depends(get_db)) -> AiPromptOut:
+    """Bitta AI promt (metama'lumot + joriy qiymat)."""
+    return await _build_ai_prompt_out(db, key)
+
+
+@router.put(
+    "/prompts/{key}",
+    response_model=AiPromptOut,
+    dependencies=[Depends(require_permission("ai:edit_prompt"))],
+)
+async def update_ai_prompt(
+    key: str, payload: AiPromptUpdate, db: AsyncSession = Depends(get_db)
+) -> AiPromptOut:
+    """AI promt matnini tahrirlaydi (DB'da saqlanadi). Faqat registrdagi kalitlar."""
+    if prompt_meta(key) is None:
+        raise NotFoundError(f"AI promt topilmadi: {key}")
+    await SettingsRepository(db).upsert(key, payload.value)
+    await db.commit()
+    return await _build_ai_prompt_out(db, key)
+
+
+@router.post(
+    "/prompts/{key}/reset",
+    response_model=AiPromptOut,
+    dependencies=[Depends(require_permission("ai:edit_prompt"))],
+)
+async def reset_ai_prompt(key: str, db: AsyncSession = Depends(get_db)) -> AiPromptOut:
+    """AI promtni STANDART (registr) qiymatiga qaytaradi — DB'dagi tahrirni o'chiradi."""
+    if prompt_meta(key) is None:
+        raise NotFoundError(f"AI promt topilmadi: {key}")
+    await SettingsRepository(db).delete(key)
+    await db.commit()
+    return await _build_ai_prompt_out(db, key)
 
 
 # ==================== Agentni qo'lda ishga tushirish ====================
