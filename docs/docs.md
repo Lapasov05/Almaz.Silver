@@ -260,3 +260,31 @@ Ruxsat: `ai:edit_prompt`. Body yo'q. DB'dagi tahrirni o'chiradi → `current_val
 3. **Saqlash** → `PUT /ai/prompts/{key}`. **Standartga qaytarish** → `POST /ai/prompts/{key}/reset`
    (avval `default_value` bilan taqqoslab, "o'zgargan" tugmasini faollashtir).
 4. O'zgarish darhol kuchga kiradi — keyingi AI javobi yangi matnni ishlatadi (deploy shart emas).
+
+---
+
+# Kategoriyaga o'lcham (razmer) bog'lash (2026-07-31)
+
+O'lcham mahsulotga emas, **KATEGORIYAga** bog'lanadi. Kategoriyada `requires_ring_size=true` (bu
+kategoriyada o'lcham talab qilinadimi) — ha bo'lsa, `available_sizes` bilan **mavjud o'lchamlar
+ro'yxati** beriladi (masalan `["16","16.5","17","17.5","18"]`). Bo'sh/`null` — istalgan o'lcham (cheklovsiz).
+
+## API (mavjud category endpointlariga qo'shildi)
+`POST /catalog/categories` va `PATCH /catalog/categories/{id}`:
+```json
+{
+  "name_uz": "Uzuklar",
+  "requires_ring_size": true,
+  "available_sizes": ["16", "16.5", "17", "17.5", "18"]   // ixtiyoriy; bo'sh -> cheklovsiz
+}
+```
+`GET /catalog/categories` / `{id}` javobida `available_sizes: string[] | null` qaytadi.
+
+## Xulq
+- **Frontend forma:** `requires_ring_size` = "Ha" bo'lganda `available_sizes` maydonini ko'rsating
+  (teglar/chips: 16, 16.5, ...). "Yo'q" bo'lsa maydon yashiriladi/e'tiborsiz.
+- **AI:** uzuk o'lchamini so'raganda FAQAT `available_sizes` dagilarni taklif qiladi (bo'lsa).
+- **Buyurtma:** ro'yxatдан tashqari o'lcham berilsa `400`:
+  `{"detail":"Bu kategoriyada mavjud o'lchamlar: 16, 16.5, 17, 17.5, 18. '20' o'lchami mavjud emas."}`.
+  `available_sizes` bo'sh bo'lsa — har qanday o'lcham qabul qilinadi (eski xulq o'zgarmaydi).
+- Mahsulot javobida ham (`ProductOut`/AI brief) shu kategoriyaning o'lchamlari ko'rinadi.

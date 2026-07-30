@@ -92,7 +92,8 @@ class CatalogService:
         if await self.repo.get_category_by_slug(slug) is not None:
             raise AppError(f"Bu slug band: {slug}")
         category = Category(name_uz=data.name_uz, name_ru=data.name_ru, slug=slug,
-                            parent_id=data.parent_id, requires_ring_size=data.requires_ring_size)
+                            parent_id=data.parent_id, requires_ring_size=data.requires_ring_size,
+                            available_sizes=data.available_sizes)
         await self.repo.add(category)
         await self.repo.db.commit()
         return category

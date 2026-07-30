@@ -44,6 +44,8 @@ class CategoryCreate(BaseModel):
     slug: str | None = Field(default=None, max_length=150)  # bo'sh -> name_uz'dan
     parent_id: uuid.UUID | None = None
     requires_ring_size: bool = False  # faqat Uzuklar uchun true
+    # requires_ring_size=true bo'lsa — mavjud o'lchamlar (masalan ["16","16.5","17","18"]). Bo'sh -> cheklovsiz.
+    available_sizes: list[str] | None = None
 
 
 class CategoryUpdate(BaseModel):
@@ -52,6 +54,7 @@ class CategoryUpdate(BaseModel):
     slug: str | None = Field(default=None, max_length=150)
     parent_id: uuid.UUID | None = None
     requires_ring_size: bool | None = None
+    available_sizes: list[str] | None = None
 
 
 class CategoryOut(BaseModel):
@@ -63,6 +66,7 @@ class CategoryOut(BaseModel):
     slug: str
     parent_id: uuid.UUID | None
     requires_ring_size: bool
+    available_sizes: list[str] | None
 
 
 # ---------- Variant ----------

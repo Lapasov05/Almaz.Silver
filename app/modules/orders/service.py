@@ -129,6 +129,16 @@ class OrdersService:
                 tv.reserved_qty += need  # TZ 10: reservation (combo -> komponentlar)
             unit_price = product.effective_price  # combo/mahsulot narxi (chegirma bo'lsa o'sha)
 
+            # --- O'lcham (razmer) — kategoriyaga bog'langan ro'yxatga tekshirish ---
+            ring_size = (it.ring_size or "").strip() or None
+            if ring_size and product.requires_ring_size and product.category is not None:
+                sizes = product.category.available_sizes or []
+                if sizes and ring_size not in sizes:
+                    raise AppError(
+                        f"Bu kategoriyada mavjud o'lchamlar: {', '.join(str(s) for s in sizes)}. "
+                        f"'{ring_size}' o'lchami mavjud emas."
+                    )
+
             # --- Ism yozish (gravyurka) narxini aniqlash ---
             engraving_text = (it.engraving_text or "").strip() or None
             engraving_price = Decimal("0")
@@ -185,7 +195,7 @@ class OrdersService:
                     variant_id=variant.id,
                     quantity=it.quantity,
                     unit_price=unit_price,
-                    ring_size=it.ring_size,
+                    ring_size=ring_size,
                     bonus_snapshot=bonus_snapshot,
                     engraving_text=engraving_text,
                     engraving_price=engraving_price,

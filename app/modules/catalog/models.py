@@ -96,6 +96,9 @@ class Category(UUIDMixin, TimestampMixin, Base):
     # Bu kategoriya mahsulotlarida o'lcham (uzuk razmeri) bo'ladimi. Faqat «Uzuklar» = true;
     # braslet/sepochka/zirak/komplekt — universal (o'lchamsiz).
     requires_ring_size: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
+    # requires_ring_size=true bo'lsa — bu kategoriyada mavjud o'lchamlar (masalan ["16","16.5","17","18"]).
+    # Bo'sh/NULL bo'lsa istalgan o'lcham qabul qilinadi. O'lcham order_item'da (variant EMAS, TZ invariant 1).
+    available_sizes: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     parent: Mapped["Category | None"] = relationship(remote_side="Category.id")
 

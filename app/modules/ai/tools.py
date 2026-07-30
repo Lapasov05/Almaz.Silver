@@ -317,6 +317,12 @@ def _product_brief(product: Product, ctx: dict | None = None) -> dict:
         "stone": product.stone.name_uz if product.stone else None,
         "gender": product.gender.name_uz if product.gender else None,
         "requires_ring_size": product.requires_ring_size,  # uzuk=true, boshqalar universal
+        # Kategoriyaga bog'langan mavjud o'lchamlar (masalan ["16","17","18"]); bo'sh -> cheklovsiz
+        "available_sizes": (
+            product.category.available_sizes
+            if (product.requires_ring_size and product.category is not None)
+            else None
+        ),
         "available": available,
         "default_variant_id": str(default_variant.id) if default_variant else None,
         "shortcodes": [m.shortcode for m in product.media if m.shortcode],
