@@ -27,6 +27,7 @@
   "image_urls": ["https://<domen>/uploads/2026/07/abc.jpg"],   // ← MAJBURIY (kamida 1)
   "engraving_available": true,      // uzukka ism yozish (gravyurka) shu mahsulotda mumkinmi
   "engraving_price": 50000,         // bo'sh -> global settings.engraving_price
+  "engraving_max_chars": 3,         // shu uzukka sig'adigan MAKS belgi (masalan "A&B"); bo'sh -> global (20). Batafsil: FRONTEND_ENGRAVING.md
   "warranty_months": 24,            // KAFOLAT override; bo'sh -> global settings.warranty_months
   "resize_available": true,         // O'LCHAM o'zgartirish (zargar) — uzuk uchun; false -> taklif qilinmaydi
   "resize_price": 50000,            // bo'sh -> global settings.resize_price
@@ -41,6 +42,7 @@
 | `resize_available` | Uzuk o'lchamini zargar o'zgartira oladimi (uzuklarga) | `true` (uzuk bo'lsa taklif qilinadi) |
 | `resize_price` | O'lcham o'zgartirish (zargar) narxi | Global `settings.resize_price` (default 50 000) |
 | `engraving_available` / `engraving_price` | Ism yozish (gravyurka) | Global `settings.engraving_*` |
+| `engraving_max_chars` | Gravyurkaga sig'adigan MAKS belgi (har uzukka mos) — [FRONTEND_ENGRAVING.md](./FRONTEND_ENGRAVING.md) | Global `settings.engraving_max_chars` (20) |
 
 > **Global sozlamalar** (`PUT /settings/{key}`): `warranty_enabled`, `warranty_months`, `warranty_text`,
 > `resize_enabled`, `resize_price`, `resize_text`. Mahsulotda maydon berilsa — o'sha ustun keladi (override).

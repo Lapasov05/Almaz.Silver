@@ -142,6 +142,8 @@ class Product(UUIDMixin, TimestampMixin, Base):
     # --- Ism yozish (gravyurka) ---
     engraving_available: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     engraving_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    # Belgi limiti: bu uzukka sig'adigan maksimal belgi soni (NULL -> global settings.engraving_max_chars)
+    engraving_max_chars: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # --- Garantiya override (NULL bo'lsa global settings.warranty_months) ---
     warranty_months: Mapped[int | None] = mapped_column(Integer, nullable=True)

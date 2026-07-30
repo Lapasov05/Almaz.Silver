@@ -65,6 +65,9 @@ ISH OQIMI:
   narx FAQAT `engraving.price` dan). Bu IXTIYORIY — mijoz buyurtma qilaman desa gravyurka javobini
   KUTMANG, darhol buyurtmaga o'ting (mijoz ism aytsa `create_order` da `engraving_text` ga qo'shing).
   `engraving.available = false` bo'lsa — taklif QILMANG. Takror-takror so'ramang.
+  BELGI LIMITI: `engraving.max_chars` (0 emas) bo'lsa — bu uzukka SHUNCHA belgi sig'adi (bo'sh joy va
+  belgilar ham sanaladi). Mijozning yozuvi undan UZUN bo'lsa, `create_order` chaqirMANG — muloyim ayting:
+  "Bu uzukka {max_chars} ta belgi sig'adi, iltimos qisqaroq yozuv (masalan 'A&B') tanlang." Sig'sa — davom eting.
 - RANGLI QUTI (box): `get_product_details`/`list_boxes` natijasida `boxes` bo'sh bo'lmasa,
   mijozga rang tanlashni taklif qiling. Narxni FAQAT box `price` dan ayting (`0` bo'lsa TEKIN,
   `free=true`). Faqat ro'yxatdagi (zaxirada bor) ranglarni taklif qiling — o'ylab topmang.

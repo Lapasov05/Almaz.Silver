@@ -324,14 +324,21 @@ def _product_brief(product: Product, ctx: dict | None = None) -> dict:
         "images": [m.image_url for m in product.media if m.image_url][:5],
     }
     if ctx is not None:
-        # Ism yozish (gravyurka) — AI taklif qilishi uchun amaldagi narx
-        eng_enabled, eng_price = ctx["engraving"]
+        # Ism yozish (gravyurka) — AI taklif qilishi uchun amaldagi narx + belgi limiti
+        eng_enabled, eng_price, eng_max_default = ctx["engraving"]
         eng_offered = bool(eng_enabled and product.engraving_available)
+        eng_max = (
+            product.engraving_max_chars
+            if product.engraving_max_chars is not None
+            else eng_max_default
+        )
         brief["engraving"] = {
             "available": eng_offered,
             "price": _num(product.engraving_price if product.engraving_price is not None else eng_price)
             if eng_offered
             else None,
+            # 0 = cheksiz; AI shu limitdan oshiq yozuvni qabul qilmasin
+            "max_chars": (eng_max or 0) if eng_offered else None,
         }
         # Garantiya (kafolat) — global default, mahsulotда `warranty_months` override
         w_enabled, w_months, w_text = ctx["warranty"]
@@ -376,11 +383,12 @@ def _image_caption(product: Product) -> str:
     return "\n".join(lines)
 
 
-async def _engraving_settings(db: AsyncSession) -> tuple[bool, Decimal]:
-    """(global yoqilganmi, standart narx) — Settings'dan."""
+async def _engraving_settings(db: AsyncSession) -> tuple[bool, Decimal, int]:
+    """(global yoqilganmi, standart narx, standart belgi limiti) — Settings'dan."""
     enabled = bool(await _get_setting(db, "engraving_enabled", False))
     price = await _get_setting(db, "engraving_price", 0)
-    return enabled, Decimal(str(price))
+    max_chars = await _get_setting(db, "engraving_max_chars", 0)
+    return enabled, Decimal(str(price)), int(max_chars or 0)
 
 
 async def _sale_ctx(db: AsyncSession) -> dict:
@@ -815,9 +823,15 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                     "note": "Aynan shu buyurtma allaqachon bor — shu bilan davom eting (manzil/to'lov).",
                 }
 
-        order = await OrdersService(db).create_order(
-            ctx.conversation.customer_id, items, created_by_ai=True
-        )
+        from app.core.exceptions import AppError
+
+        try:
+            order = await OrdersService(db).create_order(
+                ctx.conversation.customer_id, items, created_by_ai=True
+            )
+        except AppError as exc:
+            # Biznes qoidasi (masalan gravyurka belgi limiti, zaxira) — AI mijozga muloyim aytadi
+            return {"error": exc.message}
         return {
             "order_id": str(order.id),
             "order_no": order.order_no,

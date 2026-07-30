@@ -267,6 +267,7 @@ class ProductCreate(BaseModel):
     ai_keywords: list[str] | None = None
     engraving_available: bool = False
     engraving_price: Decimal | None = Field(default=None, ge=0)
+    engraving_max_chars: int | None = Field(default=None, ge=1)  # bo'sh -> global settings.engraving_max_chars
     # Kafolat override (bo'sh -> global settings.warranty_months) + o'lcham o'zgartirish (zargar)
     warranty_months: int | None = Field(default=None, ge=0)
     resize_available: bool = True
@@ -293,6 +294,7 @@ class ProductUpdate(BaseModel):
     ai_keywords: list[str] | None = None
     engraving_available: bool | None = None
     engraving_price: Decimal | None = Field(default=None, ge=0)
+    engraving_max_chars: int | None = Field(default=None, ge=1)
     warranty_months: int | None = Field(default=None, ge=0)
     resize_available: bool | None = None
     resize_price: Decimal | None = Field(default=None, ge=0)
@@ -315,6 +317,7 @@ class ProductOut(BaseModel):
     ai_keywords: list[str] | None
     engraving_available: bool
     engraving_price: Decimal | None
+    engraving_max_chars: int | None
     warranty_months: int | None
     resize_available: bool
     resize_price: Decimal | None

@@ -87,6 +87,11 @@ class OrdersService:
         default_engraving_price = (
             Decimal(str(engraving_price_setting.value)) if engraving_price_setting is not None else Decimal("0")
         )
+        # Gravyurka belgi limiti (global default; mahsulotда override) — 0 = cheksiz
+        engraving_max_setting = await settings_repo.get("engraving_max_chars")
+        default_engraving_max = (
+            int(engraving_max_setting.value) if engraving_max_setting is not None else 0
+        )
 
         # Box (rangli quti) — global on/off
         boxes_enabled_setting = await settings_repo.get("boxes_enabled")
@@ -132,6 +137,17 @@ class OrdersService:
                     raise AppError("Ism yozish xizmati hozircha o'chirilgan")
                 if not product.engraving_available:
                     raise AppError(f"Bu mahsulotga ism yozib bo'lmaydi: {product.name_uz}")
+                # Belgi limiti: bu uzukka sig'adigan maksimal belgi (mahsulot override yoki global)
+                max_chars = (
+                    product.engraving_max_chars
+                    if product.engraving_max_chars is not None
+                    else default_engraving_max
+                )
+                if max_chars and len(engraving_text) > max_chars:
+                    raise AppError(
+                        f"Bu uzukka eng ko'pi {max_chars} ta belgi sig'adi, "
+                        f"siz {len(engraving_text)} ta yubordingiz. Iltimos, qisqaroq yozuv tanlang."
+                    )
                 # Mahsulotда o'z narxi bo'lsa o'sha, aks holda Settings'dagi narx
                 engraving_price = (
                     product.engraving_price

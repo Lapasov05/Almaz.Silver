@@ -142,6 +142,7 @@ class CatalogService:
             low_stock_threshold=data.low_stock_threshold,
             status=data.status, ai_keywords=data.ai_keywords,
             engraving_available=data.engraving_available, engraving_price=data.engraving_price,
+            engraving_max_chars=data.engraving_max_chars,
             warranty_months=data.warranty_months,
             resize_available=data.resize_available, resize_price=data.resize_price,
         )

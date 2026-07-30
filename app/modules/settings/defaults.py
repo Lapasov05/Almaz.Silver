@@ -40,6 +40,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Global boshqaruv: yoqish/o'chirish + narx. Mahsulotда o'z narxi bo'lsa, o'sha ustun keladi.
     "engraving_enabled": True,
     "engraving_price": 50000,
+    # Gravyurka belgi limiti (global default; mahsulotда o'z limiti bo'lsa o'sha). 0 = cheksiz.
+    "engraving_max_chars": 20,
 
     # --- Qo'shimcha xizmat: box (rangli quti) ---
     # Global on/off. Narx/rang/zaxira har kategoriyada alohida (category bo'limi).
