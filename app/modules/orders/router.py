@@ -10,7 +10,7 @@ from app.core.deps import require_permission
 from app.core.pagination import Page, PageParams, page_params
 from app.modules.identity.models import User
 from app.modules.orders.models import OrderStatus
-from app.modules.orders.schemas import OrderCancel, OrderCreate, OrderOut
+from app.modules.orders.schemas import OrderCancel, OrderCreate, OrderOut, OrderStatusUpdate
 from app.modules.orders.service import OrdersService
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -74,3 +74,17 @@ async def cancel_order(
 ) -> OrderOut:
     """Buyurtmani bekor qiladi va zaxirani bo'shatadi (reserved_qty--)."""
     return OrderOut.model_validate(await service.cancel_order(order_id, changed_by=user.id))
+
+
+@router.post("/{order_id}/status", response_model=OrderOut)
+async def set_order_status(
+    order_id: uuid.UUID,
+    payload: OrderStatusUpdate,
+    service: OrdersService = Depends(get_orders_service),
+    user: User = Depends(require_permission("orders:update")),
+) -> OrderOut:
+    """Kanban board: buyurtma statusini qo'lda o'zgartiradi (drag-&-drop) + history yozadi.
+
+    cancelled/refunded/returned bu yerda emas — /cancel ishlatiladi (zaxira bo'shatiladi).
+    """
+    return OrderOut.model_validate(await service.set_status(order_id, payload.status, changed_by=user.id))

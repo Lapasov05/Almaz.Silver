@@ -245,6 +245,25 @@ class OrdersService:
             order_id, OrderStatus.cancelled, changed_by=changed_by, release_reservation=True
         )
 
+    # Zaxira bo'shatishni talab qiladigan statuslar — bular /status orqali EMAS, /cancel orqali.
+    _STATUS_VIA_CANCEL = {OrderStatus.cancelled, OrderStatus.refunded, OrderStatus.returned}
+
+    async def set_status(
+        self, order_id: uuid.UUID, to_status: OrderStatus, *, changed_by: uuid.UUID | None = None
+    ) -> Order:
+        """Kanban board: buyurtma statusini qo'lda o'zgartiradi (admin/menejer, drag-&-drop).
+
+        Statusni yozadi + order_status_history qo'shadi. Zaxira-ta'sirli bekor/qaytarish
+        (cancelled/refunded/returned) bu yerda QABUL QILINMAYDI — /orders/{id}/cancel ishlatiladi
+        (u zaxirani bo'shatadi). Idempotent: yangi status eskisi bilan bir xil bo'lsa — o'zgarishsiz.
+        """
+        if to_status in self._STATUS_VIA_CANCEL:
+            raise AppError("Bekor/qaytarish uchun /orders/{id}/cancel ishlating (zaxira bo'shatiladi)")
+        order = await self.get(order_id)  # yo'q bo'lsa 404 "Buyurtma topilmadi"
+        if order.status == to_status.value:
+            return order  # idempotent — history yozilmaydi
+        return await self.change_status(order_id, to_status, changed_by=changed_by)
+
     async def _release_reservation(self, order: Order) -> None:
         """Band qilingan zaxirani bo'shatadi (reserved_qty--), TZ 10. Variant/combo + box."""
         for item in order.items:

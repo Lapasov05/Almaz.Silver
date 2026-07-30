@@ -1,0 +1,157 @@
+# Backend — Buyurtma bosqichini o'zgartirish endpoint (Kanban drag-&-drop)
+
+> ✅ **BAJARILDI (2026-07-30):** `POST /orders/{order_id}/status` endpointи qo'shildi va testdan o'tdi.
+> Frontend `.env` da `VITE_FEATURE_ORDERS_DND=true` qilishi mumkin — boshqa backend ishi kerak emas.
+> Qaror: **A variant** (admin/menejer istalgan o'tishga ruxsat) + `cancelled/refunded/returned`
+> `/orders/{id}/cancel` orqali (zaxira bo'shatiladi). Batafsil §2, §4.
+
+> Kim uchun: backend dasturchisi.
+> Nima kerak edi: buyurtma statusini qo'lda o'zgartirish (stage transition) endpointi. Ilgari yo'q edi,
+> shu sababli Buyurtmalar sahifasidagi Kanban drag-&-drop faqat brauzerda ishlardi — serverga
+> saqlanmasdi (sahifani yangilasa, karta eski ustuniga qaytardi).
+>
+> Frontend bu endpointга allaqachon to'liq ulangan (optimistik yangilash + rollback + toast).
+
+Backend bazaviy URL (prod): https://almaz.api.cognilabs.org
+
+---
+
+## 1. Muammo va tasdiqlangan holat (live probe, 2026-07-29 — endi HAL QILINDI)
+
+> Quyidagi jadval endpoint qo'shilishidan OLDINGI holat. Endi `POST /orders/{id}/status` **mavjud**
+> (`orders:update` ruxsati bilan) va §2 dagidek ishlaydi.
+
+Kanban ustundan-ustunga sudralganda status shu endpointга yuborilishi kerak edi, lekin ilgari yo'q edi:
+
+| So'rov | Natija | Xulosa |
+|---|---|---|
+| POST /orders/{id}/status { "status": "confirmed" } | 404 {"detail":"Not Found"} | Route umuman mavjud emas |
+| POST /orders/{id}/cancel (mavjud, taqqoslash uchun) | 404 {"detail":"Buyurtma topilmadi"} | Route bor — faqat buyurtma topilmadi |
+| PATCH /orders/{id} | 405 Allow: GET | Buyurtmani tahrirlash ham yo'q (alohida masala, §6) |
+
+Ya'ni generik 404 "Not Found" (route yo'q) vs /cancel`ning aniq "Buyurtma topilmadi"` (route bor) —
+farq statusni o'zgartirish route umuman ro'yxatdan o'tmaganini ko'rsatadi.
+
+Hozir yagona haqiqiy status o'zgarishi — `POST /orders/{id}/cancel` (faqat `cancelled`ga).
+
+---
+
+## 2. Kerakli endpoint — `POST /orders/{order_id}/status`
+
+Frontend aynan shuni chaqiradi (src/features/orders/api.ts → setOrderStatus):
+
+POST /orders/{order_id}/status
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{ "status": "confirmed" }
+
+| Maydon | Tur | Majburiy | Izoh |
+|---|---|---|---|
+| order_id (path) | uuid | HA | Buyurtma id |
+| status (body) | enum OrderStatus | HA | Yangi status (quyidagi ro'yxatdan) |
+
+Ruxsat: orders:update (yoki mavjud orders:manage) — admin/menejer rollarida. Ruxsatsiz 403.
+
+Javob `200` — to'liq yangilangan `OrderOut` (frontend javobni cache'ga yozadi):
+
+{
+  "id": "d4e5...uuid",
+  "order_no": "ORD-260729-EE7220",
+  "customer_id": "…",
+  "assigned_operator_id": "…",
+  "status": "confirmed",
+  "items_total": "900000.00",
+  "delivery_fee": "30000.00",
+  "grand_total": "930000.00",
+  "created_at": "2026-07-29T10:00:00Z",
+  "items": [ … ],
+  "history": [
+    { "from_status": "waiting_payment", "to_status": "confirmed",
+      "changed_by": "user-uuid", "created_at": "2026-07-29T12:00:00Z" }
+  ]
+}
+
+Nima qilishi kerak:
+1. order.status ni yangi qiymatga o'rnatish.
+2. order_status_history ga yozuv qo'shish: from_status (eski), to_status (yangi), changed_by
+   (joriy foydalanuvchi), created_at. Frontend history[] ni OrderOut ichida kutadi.
+3. To'liq OrderOut qaytarish.
+
+> Idempotent: yangi status eski bilan bir xil bo'lsa — 200 qaytaring (o'zgarishsiz), `history`ga
+> yozmasangiz ham bo'ladi. Frontend bir xil ustunga tashlashni allaqachon bloklaydi, lekin xavfsiz bo'lsin.
+
+---
+
+## 3. `OrderStatus` qiymatlari va Kanban ustunlari
+
+Frontenddagi to'liq enum (src/shared/api/types.ts):
+
+draft · pending · waiting_payment · payment_review · confirmed ·
+preparing · packed · shipping · delivered · completed ·
+cancelled · refunded · returned
+
+Kanban ustunlari → tashlaganda yuboriladigan asosiy status:
+
+| Ustun (UI) | Yuboriladigan status | Ustunga tegishli statuslar |
+|---|---|---|
+| Yangi | pending | draft, pending |
+| To'lov kutilmoqda | waiting_payment | waiting_payment, payment_review |
+| Tasdiqlangan | confirmed | confirmed |
+| Tayyorlanmoqda | preparing | preparing, packed |
+| Yo'lda | shipping | shipping |
+| Yakunlangan | delivered | delivered, completed |
+| Bekor / qaytarilgan | cancelled | cancelled, refunded, returned |
+
+---
+
+## 4. Transition qoidalari (backend qarori)
+
+Ikki variant bor edi — **A variant tanlandi va amalga oshirildi**:
+- ✅ **A (tanlandi, sodda): admin/menejer uchun istalgan → istalgan o'tishга ruxsat** (qo'lda tuzatish
+  boardi). Statusni yozadi + history qo'shadi. Board to'liq ishlaydi. `set_status` (orders service).
+- B (ishlatilmadi): ruxsat etilgan o'tishlar grafi (qat'iy). Kerak bo'lsa keyin qo'shsa bo'ladi
+  (noto'g'ri o'tishда 400 + `{"detail":"<sabab>"}`).
+
+> ✅ **`cancelled` qarori (amalga oshirildi):** `POST /orders/{id}/status` `cancelled/refunded/returned`
+> ni **qabul qilmaydi** → `400 {"detail":"Bekor/qaytarish uchun /orders/{id}/cancel ishlating (zaxira
+> bo'shatiladi)"}`. Frontend «Bekor» ustuniga tashlaganда **`POST /orders/{id}/cancel`** chaqirsin (u
+> zaxirani bo'shatadi). Qolgan barcha statuslar `/status` orqali.
+
+---
+
+## 5. Xatolar
+
+| Holat | HTTP | detail |
+|---|---|---|
+| Buyurtma topilmadi | 404 | "Buyurtma topilmadi" |
+| Noto'g'ri status qiymati | 422 | FastAPI validatsiya (enum) |
+| Ruxsat etilmagan o'tish (B varianti) | 400 | matnli sabab |
+| Ruxsat yo'q | 403 | orders:update kerak |
+| Token yo'q/eskirgan | 401 | — |
+
+---
+
+## 6. Bog'liq (ixtiyoriy, alohida) — PATCH /orders/{order_id}
+
+Hozir 405 Allow: GET. Buyurtmani tahrirlash (mijoz, qatorlar, o'lcham, narx, izoh) shu endpointни kutadi
+va frontendда VITE_FEATURE_ORDER_EDITING flagi ortида tayyor turibdi. Drag-&-drop uchun shart emas —
+faqat kelajak uchun eslatma.
+
+Kutilayotgan shakl: PATCH /orders/{id} { status?, notes?, customer_id?, items?, ring_size?, … } →
+OrderOut.
+
+---
+
+## 7. Frontend tomoni (siz uchun kontekst — o'zgartirish kerak emas)
+
+- POST /orders/{id}/status allaqachon ulangan: setOrderStatus() + useSetOrderStatus()
+  (optimistik yangilash, xatoда rollback + toast).
+- Kanban board FEATURES.ordersKanbanDnd flagi ortида. Endpoint chiqishi bilan:
+  `.env` da `VITE_FEATURE_ORDERS_DND=true` — tamom.
+- Test: bir buyurtmани ustundan-ustunga sudrab, sahifani yangilang — status saqlanib qolishi kerak;
+  order.history ga yangi yozuv qo'shilishi kerak.
+
+Qisqacha (BAJARILDI): `POST /orders/{order_id}/status { status }` → yangilangan `OrderOut`; statusни
+yozadi + history qo'shadi; ruxsat `orders:update`; `cancelled/refunded/returned` → `/cancel` (400 bilan
+yo'naltiradi); idempotent (bir xil status → 200, history yozilmaydi). Testdan o'tgan (jonli Postgres).

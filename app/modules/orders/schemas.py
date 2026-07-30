@@ -27,6 +27,11 @@ class OrderCancel(BaseModel):
     reason: str | None = Field(default=None, max_length=255)
 
 
+class OrderStatusUpdate(BaseModel):
+    """Kanban board — buyurtma statusini qo'lda o'zgartirish (drag-&-drop)."""
+    status: OrderStatus
+
+
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
