@@ -135,6 +135,8 @@ ISH OQIMI:
 """
 
 
-def build_system_prompt(prompt_version: int = 1, override: str | None = None) -> str:
-    body = override.strip() if override else BASE_SYSTEM_PROMPT
+def build_system_prompt(prompt_version: int = 1, base: str | None = None, override: str | None = None) -> str:
+    """System promptni yig'adi. `base` — DB'dan (registr) kelgan asosiy matn; `override` — eski
+    `system_prompt_override` sozlamasi (agar to'ldirilgan bo'lsa, hammasidan ustun)."""
+    body = (override.strip() if override else None) or base or BASE_SYSTEM_PROMPT
     return f"{body}\n\n[prompt_version={prompt_version}]"

@@ -17,6 +17,7 @@ from app.core.exceptions import NotFoundError
 from app.modules.ai import memory as memory_mod
 from app.modules.ai.guardrail import enforce
 from app.modules.ai.llm.base import LlmMessage, LLMProvider
+from app.modules.ai.prompt_registry import get_ai_text
 from app.modules.ai.prompts import build_system_prompt
 from app.modules.ai.state_machine import infer_next_state
 from app.modules.ai.tools import TOOL_SPECS, ToolContext, dispatch
@@ -121,21 +122,18 @@ async def _active_order_context(db, conv) -> str | None:
     items_total = int(order.items_total or 0)
     fee = int(order.delivery_fee or 0)
     total = int(order.grand_total or 0)
-    guide = {
-        "pending": ("Manzil hali TASDIQLANMAGAN. request_location bilan xarita havolasini bering. "
-                    "Mijoz 'yubordim' desa-yu holat hali pending bo'lsa — xaritada joyni belgilab "
-                    "TASDIQLASH tugmasini bosishini muloyim ayting yoki havolani qayta yuboring."),
-        "waiting_payment": ("Manzil qabul qilingan. To'lov kartasini bering (get_payment_card) va chek "
-                            "RASMINI so'rang. Mijoz RASM yuborsa — bu to'lov cheki, DARHOL submit_receipt chaqiring."),
-        "payment_review": ("Chek yuborilgan, operator tekshirmoqda. Mijozga muloyim sabr ayting. Yangi "
-                           "chek (rasm) yuborsa submit_receipt. Suhbatni tugatma, savoliga javob ber."),
-    }.get(order.status, "Buyurtmani yakunlashda davom et.")
+    guide_key = f"ai_ctx_order_guide_{order.status}"
+    guide = await get_ai_text(db, guide_key)
+    if not guide:
+        guide = await get_ai_text(db, "ai_ctx_order_guide_default")
     hint = ""
     if order.status in ("waiting_payment", "payment_review") and await _latest_incoming_has_image(db, conv.id):
-        hint = " MIJOZ HOZIR RASM YUBORDI — bu to'lov cheki, DARHOL submit_receipt chaqiring."
-    return (f"[Faol buyurtma {order.order_no}: {products}. Summa: {items_total}, yetkazish: {fee}, "
-            f"JAMI: {total} so'm. Holat: {order.status}. Bu mijozning JORIY buyurtmasi — kontekstni "
-            f"UNUTMA, boshqa buyurtma yaratma. Keyingi qadam: {guide}{hint}]")
+        hint = await get_ai_text(db, "ai_ctx_order_receipt_hint")
+    return await get_ai_text(
+        db, "ai_ctx_order",
+        order_no=order.order_no, products=products, items_total=items_total,
+        fee=fee, grand_total=total, status=order.status, guide=guide, hint=hint,
+    )
 
 
 async def _instagram_context(db, conv) -> str | None:
@@ -175,15 +173,13 @@ async def _instagram_context(db, conv) -> str | None:
         return None
     product = await CatalogService(CatalogRepository(db)).resolve_instagram_media(ref)
     if product is None:
-        return ("[Instagram: mijoz post/reel/story (rasm yoki video) yubordi, lekin u bazaga ulanmagan — "
-                "mahsulot topilmadi. Mijozga ODAMDEK, muloyim uzr ayting (masalan: 'Kechirasiz, bu "
-                "videodagi mahsulotni topolmadim') va mahsulot nomini yoki suratini so'rang. Bir xil "
-                "jumlani takrorlamang, tabiiy yozing.]")
+        return await get_ai_text(db, "ai_ctx_instagram_not_found")
     avail = product.available
-    tip = ("Shu mahsulot bo'yicha savdoni davom ettir (o'lcham/zaxira/narx)." if avail > 0
-           else "Zaxirada yo'q - mijozga muloyim ayt va o'xshash mahsulot taklif qil (recommend).")
-    return (f"[Instagram konteksti: mijoz '{product.name_uz}' mahsulotini ko'rdi. "
-            f"Narx: {product.effective_price}. Zaxira: {avail}. {tip}]")
+    tip = await get_ai_text(db, "ai_ctx_instagram_tip_instock" if avail > 0 else "ai_ctx_instagram_tip_outstock")
+    return await get_ai_text(
+        db, "ai_ctx_instagram_found",
+        name=product.name_uz, price=product.effective_price, avail=avail, tip=tip,
+    )
 
 
 class Agent:
@@ -222,7 +218,7 @@ class Agent:
                 return AgentOutcome(status="skipped", reason="operator_handoff")  # vaqtincha pauza
         if self.provider is None:
             # LLM hali ulanmagan (tool'lar keyin qo'shiladi) — birinchi xabarga BOSHLANG'ICH salom
-            greeting = str(await _setting(self.db, "ai_greeting_text", "") or "")
+            greeting = await get_ai_text(self.db, "ai_greeting_text")
             if greeting and AiState(conv.ai_state) == AiState.greeting:
                 message = await InboxService(inbox_repo).ai_send(conv, greeting)
                 conv.ai_state = AiState.browsing.value
@@ -243,8 +239,9 @@ class Agent:
 
         # --- Prompt + memory (TZ 7.2/7.3) ---
         prompt_version = int(await _setting(self.db, "prompt_version", 1) or 1)
-        override = await _setting(self.db, "system_prompt_override", None)
-        system_prompt = build_system_prompt(prompt_version, override)
+        base_prompt = await get_ai_text(self.db, "ai_system_prompt")  # DB (registr) — asosiy prompt
+        override = await _setting(self.db, "system_prompt_override", None)  # eski override (ustun)
+        system_prompt = build_system_prompt(prompt_version, base_prompt, override)
         # --- Tool-calling sikli (TZ 7.4) ---
         ctx = ToolContext(db=self.db, conversation=conv)
         used_tools: list[str] = []
@@ -296,7 +293,7 @@ class Agent:
                 break
             else:
                 # Sikl tugadi — operatorga o'tkazamiz (AI to'xtaydi, operator qo'lga oladi)
-                text = "Kechirasiz, so'rovingizni to'liq bajara olmadim. Operator tez orada bog'lanadi."
+                text = await get_ai_text(self.db, "ai_msg_fallback")
                 used_tools.append("handoff_to_operator")
                 conv.ai_state = AiState.handed_off.value
                 conv.ai_enabled = False

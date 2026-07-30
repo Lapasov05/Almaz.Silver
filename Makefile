@@ -68,6 +68,10 @@ demo-instagram: ## Demo IG media (mahsulotlarga post+story link)
 	$(DC) exec -T api python -m app.demo_instagram
 demo-knowledge: ## Demo AI bilim bazasi (mijoz savollari: parvarish/o'lcham/yetkazish/to'lov/kafolat)
 	$(DC) exec -T api python -m app.demo_knowledge
+ai-prompts-seed: ## AI promtlarni DB'ga yozadi (idempotent) — har biri MAQSAD+QAYERDA bilan chiqadi
+	$(DC) exec -T api python -m app.seed_ai_prompts
+ai-prompts-seed-force: ## AI promtlarni registr standarti bilan QAYTA yozadi (DB tahrirlar yo'qoladi)
+	$(DC) exec -T -e FORCE=1 api python -m app.seed_ai_prompts
 seed-integrations: ## Integration config qatorlarini yaratish (placeholder)
 	$(DC) exec -T api python -m app.seed_integrations
 shell: ## API konteyner ichiga bash

@@ -51,18 +51,17 @@ async def _send_payment_followup(db: AsyncSession, order) -> None:
         conv = await inbox.repo.get_open_conversation(order.customer_id, customer.channel)
         if conv is None:
             return
+        from app.modules.ai.prompt_registry import get_ai_text
+
         fee = f"{int(order.delivery_fee or 0):,}".replace(",", " ")
         total = f"{int(order.grand_total or 0):,}".replace(",", " ")
         card = await PaymentRepository(db).get_default_card()
-        lines = [
-            "Manzilingiz qabul qilindi ✅",
-            f"Yetkazish: {fee} so'm. Jami to'lov: {total} so'm.",
-        ]
+        lines = [await get_ai_text(db, "ai_msg_location_confirmed_head", fee=fee, total=total)]
         if card is not None:
-            lines.append(f"To'lov uchun karta: {card.card_number_masked} ({card.holder_name}).")
-            lines.append("To'lovni amalga oshirgach, chek RASMINI shu yerga yuboring.")
+            lines.append(await get_ai_text(
+                db, "ai_msg_location_confirmed_card", card=card.card_number_masked, holder=card.holder_name))
         else:
-            lines.append("To'lov kartasi ma'lumoti tez orada yuboriladi.")
+            lines.append(await get_ai_text(db, "ai_msg_location_confirmed_nocard"))
         await inbox.ai_send(conv, "\n".join(lines))
         conv.ai_state = AiState.awaiting_payment.value
         await db.commit()

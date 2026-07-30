@@ -155,3 +155,49 @@ OrderOut.
 Qisqacha (BAJARILDI): `POST /orders/{order_id}/status { status }` → yangilangan `OrderOut`; statusни
 yozadi + history qo'shadi; ruxsat `orders:update`; `cancelled/refunded/returned` → `/cancel` (400 bilan
 yo'naltiradi); idempotent (bir xil status → 200, history yozilmaydi). Testdan o'tgan (jonli Postgres).
+
+---
+
+# AI promtlar — koddan emas, DATABASE'dan boshqariladi (2026-07-31)
+
+Barcha sun'iy intellekt matnlari (system prompt, kontekst shablonlari, tayyor xabarlar) endi bitta
+**registrda** (`app/modules/ai/prompt_registry.py`) va **settings jadvalida** (DB). Kod DOIM
+`get_ai_text(db, key, **fmt)` orqali o'qiydi: avval DB, bo'lmasa registr standarti (fallback). Ya'ni
+prodda promtlarни DB'dan (settings API) tahrirlaysiz — kodga tegmasdan.
+
+## Prodda ishga tushirish (bir marta)
+```bash
+make ai-prompts-seed          # 16 promtni DB'ga yozadi (idempotent — mavjudini o'zgartirmaydi)
+                              # har biri MAQSAD + QAYERDA ishlatilishi bilan chiqadi
+make ai-prompts-seed-force    # registr standarti bilan QAYTA yozadi (DB tahrirlar yo'qoladi)
+```
+Tahrirlash: `PUT /settings/{key}` `{ "value": "..." }` (kalitlar quyida). Seed shart emas — seed
+qilinmasa kod registr standartини ishlatadi (AI baribir ishlaydi); seed faqat DB'dan tahrirlash uchun.
+
+## Barcha AI promt kalitlari (maqsad + qayerda)
+| Kalit (settings) | Maqsad | Qayerda ishlatiladi |
+|---|---|---|
+| `ai_system_prompt` | Asosiy sotuvchi system prompt (rol, qoidalar, oqim) — har javobga | agent.py::respond |
+| `ai_greeting_text` | Birinchi salom (LLM yo'q rejimda) | agent.py::respond |
+| `ai_ctx_order` | Faol buyurtma konteksti shabloni (xotira/follow-up) | agent.py::_active_order_context |
+| `ai_ctx_order_guide_pending` | Buyurtma pending — keyingi qadam | agent.py::_active_order_context |
+| `ai_ctx_order_guide_waiting_payment` | Manzil bor, to'lov kutilmoqda — keyingi qadam | agent.py::_active_order_context |
+| `ai_ctx_order_guide_payment_review` | Chek tekshirilmoqda — keyingi qadam | agent.py::_active_order_context |
+| `ai_ctx_order_guide_default` | Boshqa holat — umumiy ko'rsatma | agent.py::_active_order_context |
+| `ai_ctx_order_receipt_hint` | Rasm = chek ekani eslatmasi | agent.py::_active_order_context |
+| `ai_ctx_instagram_found` | IG mahsulot topildi — grounding | agent.py::_instagram_context |
+| `ai_ctx_instagram_tip_instock` | IG mahsulot zaxirada bor | agent.py::_instagram_context |
+| `ai_ctx_instagram_tip_outstock` | IG mahsulot zaxirada yo'q | agent.py::_instagram_context |
+| `ai_ctx_instagram_not_found` | IG mahsulot topilmadi — odamdek uzr | agent.py::_instagram_context |
+| `ai_msg_fallback` | Bajara olmaganda → operator | agent.py::respond |
+| `ai_msg_location_confirmed_head` | Manzil tasdiqlandi + summa (auto) | checkout.py::_send_payment_followup |
+| `ai_msg_location_confirmed_card` | To'lov kartasi + chek so'rovi | checkout.py::_send_payment_followup |
+| `ai_msg_location_confirmed_nocard` | Karta yo'q — vaqtinchalik xabar | checkout.py::_send_payment_followup |
+
+> Shablonlardagi `{o'rin}`lar (masalan `ai_ctx_order` da `{order_no} {grand_total} {guide}`) kod
+> tomonidan to'ldiriladi — tahrirlaganда o'sha nomlarni saqlang. `ai_system_prompt` ni `.format`
+> QILMAYDI, shuning uchun undagi `{months}` kabi misollar xavfsiz. To'liq ro'yxat va standart
+> qiymatlar: `app/modules/ai/prompt_registry.py`.
+
+> Eslatma: eski `system_prompt_override` sozlamasi hali ham ishlaydi (to'ldirilsa `ai_system_prompt`dan
+> ustun keladi) — moslik uchun.
