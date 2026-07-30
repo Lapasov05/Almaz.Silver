@@ -94,6 +94,10 @@ services:
     container_name: almaz_worker
     restart: unless-stopped
     env_file: .env
+    # Chek rasmini worker saqlaydi (AI submit_receipt) -> api /uploads orqali serve qiladi.
+    # Bir xil volume BO'LMASA rasm faqat worker'da qoladi va api'da 404 bo'ladi.
+    volumes:
+      - uploads_data:/code/uploads
     command: celery -A app.celery_app:celery_app worker --loglevel=info
     depends_on:
       rabbitmq:
