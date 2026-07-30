@@ -302,7 +302,7 @@ TOOL_SPECS: list[dict] = [
 ]
 
 
-def _product_brief(product: Product, engraving: tuple[bool, Decimal] | None = None) -> dict:
+def _product_brief(product: Product, ctx: dict | None = None) -> dict:
     active_variants = [v for v in product.variants if v.is_active and v.deleted_at is None]
     default_variant = active_variants[0] if active_variants else None
     available = sum(max(v.available, 0) for v in active_variants)
@@ -323,15 +323,32 @@ def _product_brief(product: Product, engraving: tuple[bool, Decimal] | None = No
         # Rasm URL'lari — AI mijozga rasm yuborishi uchun (send_product_images)
         "images": [m.image_url for m in product.media if m.image_url][:5],
     }
-    # Ism yozish (gravyurka) — AI mijozga taklif qilishi uchun amaldagi narx
-    if engraving is not None:
-        enabled_globally, default_price = engraving
-        offered = bool(enabled_globally and product.engraving_available)
+    if ctx is not None:
+        # Ism yozish (gravyurka) — AI taklif qilishi uchun amaldagi narx
+        eng_enabled, eng_price = ctx["engraving"]
+        eng_offered = bool(eng_enabled and product.engraving_available)
         brief["engraving"] = {
-            "available": offered,
-            "price": _num(product.engraving_price if product.engraving_price is not None else default_price)
-            if offered
+            "available": eng_offered,
+            "price": _num(product.engraving_price if product.engraving_price is not None else eng_price)
+            if eng_offered
             else None,
+        }
+        # Garantiya (kafolat) — global default, mahsulotда `warranty_months` override
+        w_enabled, w_months, w_text = ctx["warranty"]
+        if w_enabled:
+            months = product.warranty_months if product.warranty_months is not None else w_months
+            brief["warranty"] = {"available": True, "months": months, "text": w_text}
+        else:
+            brief["warranty"] = {"available": False}
+        # O'lcham o'zgartirish (zargar) — faqat uzuk (requires_ring_size) uchun; global narx / override
+        r_enabled, r_price, r_text = ctx["resize"]
+        r_offered = bool(r_enabled and product.resize_available and product.requires_ring_size)
+        brief["resize"] = {
+            "available": r_offered,
+            "price": _num(product.resize_price if product.resize_price is not None else r_price)
+            if r_offered
+            else None,
+            "text": r_text if r_offered else None,
         }
     return brief
 
@@ -364,6 +381,23 @@ async def _engraving_settings(db: AsyncSession) -> tuple[bool, Decimal]:
     enabled = bool(await _get_setting(db, "engraving_enabled", False))
     price = await _get_setting(db, "engraving_price", 0)
     return enabled, Decimal(str(price))
+
+
+async def _sale_ctx(db: AsyncSession) -> dict:
+    """Global qo'shimcha xizmat sozlamalari (bir marta o'qiladi): gravyurka + kafolat + o'lcham o'zgartirish."""
+    return {
+        "engraving": await _engraving_settings(db),
+        "warranty": (
+            bool(await _get_setting(db, "warranty_enabled", False)),
+            await _get_setting(db, "warranty_months", 0),
+            await _get_setting(db, "warranty_text", ""),
+        ),
+        "resize": (
+            bool(await _get_setting(db, "resize_enabled", False)),
+            Decimal(str(await _get_setting(db, "resize_price", 0))),
+            await _get_setting(db, "resize_text", ""),
+        ),
+    }
 
 
 def _box_brief(box) -> dict:
@@ -582,7 +616,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
 
     if name == "search_product":
         min_p, max_p = args.get("min_price"), args.get("max_price")
-        eng = await _engraving_settings(db)
+        sctx = await _sale_ctx(db)
         if min_p is not None or max_p is not None:  # byudjet bo'yicha (effective narx)
             from app.core.pagination import PageParams
 
@@ -593,18 +627,18 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 in_stock=True,  # faqat zaxirada bor (tavsiya qilingan mahsulot buyurtma qilinsin)
             )
             items.sort(key=lambda p: p.effective_price)  # arzonroqdan
-            return {"match_type": "price", "products": [_product_brief(p, eng) for p in items]}
+            return {"match_type": "price", "products": [_product_brief(p, sctx) for p in items]}
         match_type, results = await catalog.search(
             q=args.get("query"), shortcode=args.get("shortcode"), limit=5
         )
-        return {"match_type": match_type, "products": [_product_brief(p, eng) for p, _ in results]}
+        return {"match_type": match_type, "products": [_product_brief(p, sctx) for p, _ in results]}
 
     if name == "get_product_details":
         try:
             product = await catalog.get_product(uuid.UUID(str(args.get("product_id"))))
         except (ValueError, TypeError):
             return {"error": "product_id noto'g'ri — avval search_product bilan mahsulotni toping"}
-        brief = _product_brief(product, await _engraving_settings(db))
+        brief = _product_brief(product, await _sale_ctx(db))
         brief["description"] = product.description_uz
         brief["variants"] = [
             {"variant_id": str(v.id), "sku": v.sku, "available": max(v.available, 0)}
@@ -687,7 +721,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         product = await catalog.resolve_instagram_media(args.get("link_or_ref", ""))
         if product is None:
             return {"found": False}
-        brief = _product_brief(product, await _engraving_settings(db))
+        brief = _product_brief(product, await _sale_ctx(db))
         brief["found"] = True
         brief["boxes"] = await _boxes_for_product(db, product)
         return brief
@@ -713,8 +747,8 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             max_price=Decimal(str(max_p)) if max_p is not None else None,
             in_stock=True,  # faqat zaxirada bor mahsulotlar tavsiya qilinadi
         )
-        eng = await _engraving_settings(db)
-        return {"products": [_product_brief(p, eng) for p in products]}
+        sctx = await _sale_ctx(db)
+        return {"products": [_product_brief(p, sctx) for p in products]}
 
     if name == "calc_delivery":
         zone = args.get("zone")

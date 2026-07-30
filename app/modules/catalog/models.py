@@ -143,6 +143,13 @@ class Product(UUIDMixin, TimestampMixin, Base):
     engraving_available: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
     engraving_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
 
+    # --- Garantiya override (NULL bo'lsa global settings.warranty_months) ---
+    warranty_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # --- O'lcham o'zgartirish (zargar) — uzuklar uchun; NULL narx bo'lsa global settings.resize_price ---
+    resize_available: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    resize_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+
     # --- Combo (to'plam) — is_combo=true bo'lsa bu mahsulot combo; ichi combo_item'da ---
     # Combo o'z narxiga ega (price/discount_price), lekin O'Z zaxirasi yo'q:
     # sotilganda ichidagi komponent variantlar zaxirasi band bo'ladi (order xizmati hal qiladi).

@@ -142,6 +142,8 @@ class CatalogService:
             low_stock_threshold=data.low_stock_threshold,
             status=data.status, ai_keywords=data.ai_keywords,
             engraving_available=data.engraving_available, engraving_price=data.engraving_price,
+            warranty_months=data.warranty_months,
+            resize_available=data.resize_available, resize_price=data.resize_price,
         )
         for vin in (data.variants or [VariantCreate()]):
             product.variants.append(self._build_variant(vin, data.name_uz))

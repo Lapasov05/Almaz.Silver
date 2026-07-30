@@ -45,6 +45,18 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Global on/off. Narx/rang/zaxira har kategoriyada alohida (category bo'limi).
     "boxes_enabled": True,
 
+    # --- Garantiya (kafolat) ---
+    # Global default: yoqish + muddat (oy) + matn. Mahsulotда `warranty_months` bo'lsa, o'sha ustun keladi.
+    "warranty_enabled": True,
+    "warranty_months": 12,
+    "warranty_text": "Rodiy qoplama va zavod nuqsonlariga kafolat",
+
+    # --- O'lcham o'zgartirish (zargar xizmati) ---
+    # Uzuk o'lchami to'g'ri kelmasa zargar o'zgartirib beradi. Global narx; mahsulotда `resize_price` override.
+    "resize_enabled": True,
+    "resize_price": 50000,
+    "resize_text": "O'lcham to'g'ri kelmasa zargar o'zgartirib beradi",
+
     # --- Sklad ---
     "low_stock_threshold": 10,  # global «kam qolgan» chegarasi (mahsulotда override bo'lishi mumkin)
 

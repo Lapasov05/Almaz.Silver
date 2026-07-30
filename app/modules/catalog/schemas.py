@@ -267,6 +267,10 @@ class ProductCreate(BaseModel):
     ai_keywords: list[str] | None = None
     engraving_available: bool = False
     engraving_price: Decimal | None = Field(default=None, ge=0)
+    # Kafolat override (bo'sh -> global settings.warranty_months) + o'lcham o'zgartirish (zargar)
+    warranty_months: int | None = Field(default=None, ge=0)
+    resize_available: bool = True
+    resize_price: Decimal | None = Field(default=None, ge=0)  # bo'sh -> global settings.resize_price
     low_stock_threshold: int | None = Field(default=None, ge=0)  # bo'sh -> global sozlama
     variants: list[VariantCreate] | None = None
     media: list[MediaCreate] | None = None
@@ -289,6 +293,9 @@ class ProductUpdate(BaseModel):
     ai_keywords: list[str] | None = None
     engraving_available: bool | None = None
     engraving_price: Decimal | None = Field(default=None, ge=0)
+    warranty_months: int | None = Field(default=None, ge=0)
+    resize_available: bool | None = None
+    resize_price: Decimal | None = Field(default=None, ge=0)
     low_stock_threshold: int | None = Field(default=None, ge=0)
 
 
@@ -308,6 +315,9 @@ class ProductOut(BaseModel):
     ai_keywords: list[str] | None
     engraving_available: bool
     engraving_price: Decimal | None
+    warranty_months: int | None
+    resize_available: bool
+    resize_price: Decimal | None
     low_stock_threshold: int | None
     available: int                  # umumiy mavjud zaxira
     requires_ring_size: bool        # buyurtmada o'lcham kerakmi (kategoriyadan)

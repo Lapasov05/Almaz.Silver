@@ -110,7 +110,7 @@ class Settings(BaseSettings):
     ai_default_temperature: float = 0.7     # settings.ai_temperature ustun keladi
     ai_memory_message_count: int = 15       # xotira uchun oxirgi N xabar (TZ 7.3)
     ai_max_tool_iterations: int = 6         # tool-calling sikli chegarasi
-    ai_reply_delay_seconds: float = 3.0     # javob oldidan insonsimon pauza (typing ko'rinadi)
+    ai_reply_delay_seconds: float = 7.0     # javob oldidan insonsimon pauza (typing ko'rinadi)
 
     # --- MinIO / S3 ---
     s3_endpoint_url: str = "http://minio:9000"

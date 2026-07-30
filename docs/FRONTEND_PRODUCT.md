@@ -25,9 +25,26 @@
   "discount_price": 180000,
   "status": "active",
   "image_urls": ["https://<domen>/uploads/2026/07/abc.jpg"],   // ← MAJBURIY (kamida 1)
+  "engraving_available": true,      // uzukka ism yozish (gravyurka) shu mahsulotda mumkinmi
+  "engraving_price": 50000,         // bo'sh -> global settings.engraving_price
+  "warranty_months": 24,            // KAFOLAT override; bo'sh -> global settings.warranty_months
+  "resize_available": true,         // O'LCHAM o'zgartirish (zargar) — uzuk uchun; false -> taklif qilinmaydi
+  "resize_price": 50000,            // bo'sh -> global settings.resize_price
   "variants": [ { "stock_qty": 10 } ]
 }
 ```
+
+### Qo'shimcha xizmat maydonlari (ixtiyoriy, bo'sh -> global sozlama)
+| Maydon | Vazifa | Bo'sh bo'lsa |
+|---|---|---|
+| `warranty_months` | Kafolat muddati (oy) — shu mahsulotga | Global `settings.warranty_months` (default 12) |
+| `resize_available` | Uzuk o'lchamini zargar o'zgartira oladimi (uzuklarga) | `true` (uzuk bo'lsa taklif qilinadi) |
+| `resize_price` | O'lcham o'zgartirish (zargar) narxi | Global `settings.resize_price` (default 50 000) |
+| `engraving_available` / `engraving_price` | Ism yozish (gravyurka) | Global `settings.engraving_*` |
+
+> **Global sozlamalar** (`PUT /settings/{key}`): `warranty_enabled`, `warranty_months`, `warranty_text`,
+> `resize_enabled`, `resize_price`, `resize_text`. Mahsulotda maydon berilsa — o'sha ustun keladi (override).
+> Kafolat/o'lcham o'zgartirishni AI sotuvda **o'zi** mijozga aytadi (uzuk o'lchami noaniq bo'lsa: o'rta razmer → keyin zargar moslaydi).
 
 **Rasm bermasangiz** → `400`:
 ```json
