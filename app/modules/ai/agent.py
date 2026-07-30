@@ -70,6 +70,74 @@ async def _is_superseded(db, conv_id, trigger_message_id) -> bool:
     return int(res.scalar_one()) > 0
 
 
+async def _latest_incoming_has_image(db, conv_id) -> bool:
+    """Oxirgi kiruvchi xabar rasm (attachment) bo'lsa True — to'lov cheki bo'lishi mumkin."""
+    from sqlalchemy import select
+
+    from app.modules.inbox.models import Message
+
+    latest = (await db.execute(
+        select(Message).where(Message.conversation_id == conv_id, Message.direction == "incoming")
+        .order_by(Message.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if latest is None:
+        return False
+    for att in (latest.attachments or []):
+        if isinstance(att, dict) and att.get("type") == "image" and att.get("url"):
+            return True
+    return False
+
+
+async def _active_order_context(db, conv) -> str | None:
+    """Mijozning FAOL buyurtmasi bo'lsa — holat + mahsulot + keyingi qadam kontekstini AI'ga beradi.
+
+    Xotira/follow-up muammosini hal qiladi: AI har javobda joriy buyurtmani (mahsulot, o'lcham,
+    gravirovka, jami, holat) biladi va to'g'ri keyingi qadamni bajaradi (karta / chek / sabr).
+    """
+    from app.modules.catalog.repository import CatalogRepository
+    from app.modules.orders.repository import OrdersRepository
+
+    order = await OrdersRepository(db).get_active_order(conv.customer_id)
+    if order is None:
+        return None
+    catalog = CatalogRepository(db)
+    parts: list[str] = []
+    for it in order.items:
+        variant = await catalog.get_variant(it.variant_id)
+        pname = "?"
+        if variant is not None:
+            prod = await catalog.get_product(variant.product_id)
+            pname = prod.name_uz if prod is not None else "?"
+        seg = pname
+        if it.ring_size:
+            seg += f", o'lcham {it.ring_size}"
+        if it.engraving_text:
+            eng = f", gravirovka '{it.engraving_text}'"
+            if it.engraving_price:
+                eng += f" (+{int(it.engraving_price)} so'm)"
+            seg += eng
+        parts.append(seg)
+    products = "; ".join(parts) or "?"
+    items_total = int(order.items_total or 0)
+    fee = int(order.delivery_fee or 0)
+    total = int(order.grand_total or 0)
+    guide = {
+        "pending": ("Manzil hali TASDIQLANMAGAN. request_location bilan xarita havolasini bering. "
+                    "Mijoz 'yubordim' desa-yu holat hali pending bo'lsa — xaritada joyni belgilab "
+                    "TASDIQLASH tugmasini bosishini muloyim ayting yoki havolani qayta yuboring."),
+        "waiting_payment": ("Manzil qabul qilingan. To'lov kartasini bering (get_payment_card) va chek "
+                            "RASMINI so'rang. Mijoz RASM yuborsa — bu to'lov cheki, DARHOL submit_receipt chaqiring."),
+        "payment_review": ("Chek yuborilgan, operator tekshirmoqda. Mijozga muloyim sabr ayting. Yangi "
+                           "chek (rasm) yuborsa submit_receipt. Suhbatni tugatma, savoliga javob ber."),
+    }.get(order.status, "Buyurtmani yakunlashda davom et.")
+    hint = ""
+    if order.status in ("waiting_payment", "payment_review") and await _latest_incoming_has_image(db, conv.id):
+        hint = " MIJOZ HOZIR RASM YUBORDI — bu to'lov cheki, DARHOL submit_receipt chaqiring."
+    return (f"[Faol buyurtma {order.order_no}: {products}. Summa: {items_total}, yetkazish: {fee}, "
+            f"JAMI: {total} so'm. Holat: {order.status}. Bu mijozning JORIY buyurtmasi — kontekstni "
+            f"UNUTMA, boshqa buyurtma yaratma. Keyingi qadam: {guide}{hint}]")
+
+
 async def _instagram_context(db, conv) -> str | None:
     """Oxirgi kiruvchi xabar IG link/story-javob bo'lsa — mahsulotni topib AI'ga kontekst beradi."""
     from sqlalchemy import select
@@ -189,6 +257,10 @@ class Agent:
             ig_ctx = await _instagram_context(self.db, conv)
             if ig_ctx:
                 messages.insert(1, LlmMessage(role="system", content=ig_ctx))
+            # Faol buyurtma konteksti (xotira/follow-up: holat, mahsulot, keyingi qadam)
+            order_ctx = await _active_order_context(self.db, conv)
+            if order_ctx:
+                messages.insert(1, LlmMessage(role="system", content=order_ctx))
             model = str(
                 await _setting(self.db, "llm_model", settings.ai_default_model) or settings.ai_default_model
             )

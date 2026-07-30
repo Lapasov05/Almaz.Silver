@@ -7,6 +7,8 @@ IKKI QADAMLI oqim:
 Toshkent bo'lsa filial tanlash yo'q — resolve bo'sh ro'yxat qaytaradi, confirm to'g'ridan yakunlaydi.
 Endpoint'lar `/map/{token}/...` va `/checkout/{token}/...` (bir xil).
 """
+import logging
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +26,48 @@ from app.modules.delivery.schemas import (
 from app.modules.delivery.service import DeliveryService
 from app.modules.orders.repository import OrdersRepository
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["checkout"])
 
 _MAX_BRANCHES = 30  # ro'yxat juda uzun bo'lmasin (eng yaqin 30 ta)
+
+
+async def _send_payment_followup(db: AsyncSession, order) -> None:
+    """Lokatsiya tasdiqlangach mijozga AVTOMATIK: 'manzil qabul qilindi ✅ + to'lov kartasi + chek yuboring'.
+
+    Web xarita orqali tasdiqlash — mijoz xabar yozmaydi, shuning uchun tizim o'zi follow-up qiladi
+    (mijoz 'yubordim' deyishini kutmaymiz). Best-effort — xatolik confirm'ni buzmaydi.
+    """
+    try:
+        from app.modules.inbox.models import AiState, Customer
+        from app.modules.inbox.repository import InboxRepository
+        from app.modules.inbox.service import InboxService
+        from app.modules.payments.repository import PaymentRepository
+
+        customer = await db.get(Customer, order.customer_id)
+        if customer is None:
+            return
+        inbox = InboxService(InboxRepository(db))
+        conv = await inbox.repo.get_open_conversation(order.customer_id, customer.channel)
+        if conv is None:
+            return
+        fee = f"{int(order.delivery_fee or 0):,}".replace(",", " ")
+        total = f"{int(order.grand_total or 0):,}".replace(",", " ")
+        card = await PaymentRepository(db).get_default_card()
+        lines = [
+            "Manzilingiz qabul qilindi ✅",
+            f"Yetkazish: {fee} so'm. Jami to'lov: {total} so'm.",
+        ]
+        if card is not None:
+            lines.append(f"To'lov uchun karta: {card.card_number_masked} ({card.holder_name}).")
+            lines.append("To'lovni amalga oshirgach, chek RASMINI shu yerga yuboring.")
+        else:
+            lines.append("To'lov kartasi ma'lumoti tez orada yuboriladi.")
+        await inbox.ai_send(conv, "\n".join(lines))
+        conv.ai_state = AiState.awaiting_payment.value
+        await db.commit()
+    except Exception:  # noqa: BLE001 — follow-up confirm oqimini buzmasin
+        logger.warning("lokatsiya follow-up yuborilmadi (order=%s)", getattr(order, "id", None), exc_info=True)
 
 
 def get_delivery_service(db: AsyncSession = Depends(get_db)) -> DeliveryService:
@@ -77,6 +118,8 @@ async def _confirm(token: str, payload: LocationConfirmIn, service: DeliveryServ
     if delivery.bts_branch_id is not None:
         b = await DeliveryRepository(db).get_bts_branch(delivery.bts_branch_id)
         branch = BtsBranchOut.model_validate(b) if b is not None else None
+    # Tizim o'zi bilib, mijozga to'lov kartasi + chek so'rovini AVTOMATIK yuboradi
+    await _send_payment_followup(db, order)
     return CheckoutResultOut(
         order_no=order.order_no,
         location_type=delivery.location_type,
