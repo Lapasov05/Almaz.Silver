@@ -49,9 +49,13 @@ logs-worker: ## Celery worker loglari
 	$(DC) logs -f --tail=100 worker
 
 # ==================== Migratsiya / seed / shell ====================
-.PHONY: migrate seed demo-seed seed-integrations shell psql redis-cli
+.PHONY: migrate seed demo-seed seed-integrations reset-data reset-data-confirm shell psql redis-cli
 migrate: ## alembic upgrade head
 	$(DC) exec -T api alembic upgrade head
+reset-data: ## DRY-RUN: user/role/config/reference'dan tashqari nima o'chishini ko'rsatadi (o'chirmaydi)
+	$(DC) exec -T api python -m app.reset_data
+reset-data-confirm: ## HAQIQIY o'chirish: user/role/config/reference qoladi, qolgan HAMMA ma'lumot o'chadi
+	$(DC) exec -T -e RESET_CONFIRM=yes api python -m app.reset_data
 seed: ## Asosiy seed (rol/permission/settings/admin)
 	$(DC) exec -T api python -m app.seed
 demo-seed: ## Demo ma'lumot (12 mahsulot, 7 buyurtma, ...)
