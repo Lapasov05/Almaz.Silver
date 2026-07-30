@@ -66,6 +66,8 @@ demo-combos: ## Demo combolar (mavjud mahsulotlardan turli kategoriya to'plamlar
 	$(DC) exec -T api python -m app.demo_combos
 demo-instagram: ## Demo IG media (mahsulotlarga post+story link)
 	$(DC) exec -T api python -m app.demo_instagram
+demo-knowledge: ## Demo AI bilim bazasi (mijoz savollari: parvarish/o'lcham/yetkazish/to'lov/kafolat)
+	$(DC) exec -T api python -m app.demo_knowledge
 seed-integrations: ## Integration config qatorlarini yaratish (placeholder)
 	$(DC) exec -T api python -m app.seed_integrations
 shell: ## API konteyner ichiga bash
