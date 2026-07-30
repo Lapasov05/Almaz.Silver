@@ -45,6 +45,31 @@ async def _setting(db, key: str, default: Any) -> Any:
     return setting.value if setting is not None else default
 
 
+async def _is_superseded(db, conv_id, trigger_message_id) -> bool:
+    """Trigger xabaridan keyin YANGI kiruvchi (mijoz) xabar bo'lsa True — bu javob eskirgan.
+
+    Debounce: mijoz tez ketma-ket bir nechta xabar yozsa, faqat OXIRGI xabar javob oladi
+    (avvalgilari 'superseded' bo'lib jim o'tadi) — natijada bitta yaxlit javob chiqadi.
+    """
+    if trigger_message_id is None:
+        return False
+    from sqlalchemy import func, select
+
+    from app.modules.inbox.models import Message
+
+    trig = await db.get(Message, trigger_message_id)
+    if trig is None:
+        return False
+    res = await db.execute(
+        select(func.count()).select_from(Message).where(
+            Message.conversation_id == conv_id,
+            Message.direction == "incoming",
+            Message.created_at > trig.created_at,
+        )
+    )
+    return int(res.scalar_one()) > 0
+
+
 async def _instagram_context(db, conv) -> str | None:
     """Oxirgi kiruvchi xabar IG link/story-javob bo'lsa — mahsulotni topib AI'ga kontekst beradi."""
     from sqlalchemy import select
@@ -82,8 +107,10 @@ async def _instagram_context(db, conv) -> str | None:
         return None
     product = await CatalogService(CatalogRepository(db)).resolve_instagram_media(ref)
     if product is None:
-        return ("[Instagram: mijoz post/story yubordi, lekin bazadan mahsulot topilmadi. "
-                "Mijozdan qaysi mahsulot ekanini so'ra yoki tavsif bo'yicha qidir.]")
+        return ("[Instagram: mijoz post/reel/story (rasm yoki video) yubordi, lekin u bazaga ulanmagan — "
+                "mahsulot topilmadi. Mijozga ODAMDEK, muloyim uzr ayting (masalan: 'Kechirasiz, bu "
+                "videodagi mahsulotni topolmadim') va mahsulot nomini yoki suratini so'rang. Bir xil "
+                "jumlani takrorlamang, tabiiy yozing.]")
     avail = product.available
     tip = ("Shu mahsulot bo'yicha savdoni davom ettir (o'lcham/zaxira/narx)." if avail > 0
            else "Zaxirada yo'q - mijozga muloyim ayt va o'xshash mahsulot taklif qil (recommend).")
@@ -96,7 +123,9 @@ class Agent:
         self.db = db
         self.provider = provider
 
-    async def respond(self, conversation_id: uuid.UUID, *, force: bool = False) -> AgentOutcome:
+    async def respond(
+        self, conversation_id: uuid.UUID, *, force: bool = False, trigger_message_id: uuid.UUID | None = None
+    ) -> AgentOutcome:
         """AI javobini ishga tushiradi.
 
         force=True (operator override): suhbat darajasidagi bloklarни (pauza/handoff/o'chirilган)
@@ -133,6 +162,11 @@ class Agent:
                 return AgentOutcome(status="replied", reply=greeting, message_id=message.id, state=conv.ai_state)
             logger.info("LLM provayder yo'q — AI jim (conv=%s)", conv.id)
             return AgentOutcome(status="skipped", reason="no_provider")
+
+        # Debounce (LLM'dan OLDIN): bu task ishga tushguncha mijoz yana yozgan bo'lsa — jim o'tamiz,
+        # oxirgi xabar taskи to'liq kontekst bilan javob beradi (OpenAI chaqiruvini ham tejaydi).
+        if not force and await _is_superseded(self.db, conv.id, trigger_message_id):
+            return AgentOutcome(status="skipped", reason="superseded", state=conv.ai_state)
 
         # Javob tayyorlanmoqda — "yozyapti..." indikatorini yuboramiz + pauza uchun vaqt boshi
         inbox_svc = InboxService(inbox_repo)
@@ -213,6 +247,12 @@ class Agent:
         if remaining > 0:
             await inbox_svc.send_typing(conv)   # LLM tez tugagan bo'lsa indikatorni yangilaymiz
             await asyncio.sleep(remaining)
+
+        # Debounce (yuborishдан OLDIN): pauza/ishlov davomida mijoz yana yozgan bo'lsa — bu javobni
+        # YUBORMAYMIZ (eskirdi). Oxirgi xabar taskи hammasiga bitta yaxlit javob beradi (bir xil javob spamи yo'q).
+        # commit QILMAYMIZ — matnli javob ketmaydi; tool nojo'ya (order/ism) allaqachon o'z commitiga ega, saqlanadi.
+        if not force and await _is_superseded(self.db, conv.id, trigger_message_id):
+            return AgentOutcome(status="skipped", reason="superseded", state=conv.ai_state)
 
         # --- Javobni yuborish (AI, pauza qo'ymaydi) ---
         message = await inbox_svc.ai_send(conv, guard.text)

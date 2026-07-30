@@ -62,12 +62,17 @@ class AgentService:
             return self._provider_arg  # test/qo'lda berilgan (FakeProvider yoki None)
         return await get_llm_provider(self.db)
 
-    async def respond(self, conversation_id: uuid.UUID, *, force: bool = False) -> AgentOutcome:
+    async def respond(
+        self, conversation_id: uuid.UUID, *, force: bool = False, trigger_message_id: uuid.UUID | None = None
+    ) -> AgentOutcome:
         provider = await self._resolve_provider()
-        return await Agent(self.db, provider).respond(conversation_id, force=force)
+        return await Agent(self.db, provider).respond(
+            conversation_id, force=force, trigger_message_id=trigger_message_id
+        )
 
     async def handle_incoming_message(self, message_id: uuid.UUID) -> AgentOutcome:
         message = await InboxRepository(self.db).get_message(message_id)
         if message is None:
             raise NotFoundError("Xabar topilmadi")
-        return await self.respond(message.conversation_id)
+        # trigger_message_id — debounce uchun: shu xabardan keyin yangi xabar kelsa, bu javob eskiradi
+        return await self.respond(message.conversation_id, trigger_message_id=message_id)
