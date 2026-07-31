@@ -20,6 +20,8 @@ from app.modules.inbox.schemas import (
     Channel,
     ConversationOut,
     ConversationStatus,
+    CustomerOut,
+    CustomerUpdate,
     MessageOut,
     SendMessageRequest,
     TransferRequest,
@@ -157,3 +159,42 @@ async def ai_control(
         conversation_id, mode=payload.mode, minutes=payload.minutes, until=payload.until
     )
     return ConversationOut.model_validate(conv)
+
+
+# ---------- Mijoz / suhbat CRUD ----------
+@router.patch(
+    "/customers/{customer_id}",
+    response_model=CustomerOut,
+    dependencies=[Depends(require_permission("conversations:update"))],
+)
+async def update_customer(
+    customer_id: uuid.UUID,
+    payload: CustomerUpdate,
+    service: InboxService = Depends(get_inbox_service),
+) -> CustomerOut:
+    """Mijoz ism/telefonini qo'lda tahrirlaydi (partial). Noma'lum maydon -> 422."""
+    return CustomerOut.model_validate(await service.update_customer(customer_id, payload))
+
+
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission("conversations:update"))],
+)
+async def delete_conversation(
+    conversation_id: uuid.UUID, service: InboxService = Depends(get_inbox_service)
+) -> None:
+    """Suhbatni (va xabarlarini) o'chiradi. Mijoz saqlanadi."""
+    await service.delete_conversation(conversation_id)
+
+
+@router.delete(
+    "/customers/{customer_id}",
+    status_code=204,
+    dependencies=[Depends(require_permission("conversations:update"))],
+)
+async def delete_customer(
+    customer_id: uuid.UUID, service: InboxService = Depends(get_inbox_service)
+) -> None:
+    """Mijozni to'liq o'chiradi (suhbat+xabar+lokatsiya bilan). Buyurtmasi bo'lsa -> 400."""
+    await service.delete_customer(customer_id)

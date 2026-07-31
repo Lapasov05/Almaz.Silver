@@ -100,6 +100,56 @@ class InboxService:
         await self.repo.db.commit()
         return conv
 
+    # ---------- Mijoz / suhbat CRUD (operator qo'lda tahrirlash/o'chirish) ----------
+    async def get_customer(self, customer_id: uuid.UUID) -> Customer:
+        customer = await self.repo.get_customer_by_id(customer_id)
+        if customer is None:
+            raise NotFoundError("Mijoz topilmadi")
+        return customer
+
+    async def update_customer(self, customer_id: uuid.UUID, data) -> Customer:
+        """Mijoz ism/telefonini qo'lda yozadi (partial). Berilmagan maydon o'zgarmaydi."""
+        customer = await self.get_customer(customer_id)
+        fields = data.model_dump(exclude_unset=True)
+        if "full_name" in fields:
+            customer.full_name = (fields["full_name"] or None)
+        if "phone" in fields:
+            customer.phone = (fields["phone"] or None)
+        await self.repo.db.commit()
+        return customer
+
+    async def delete_conversation(self, conversation_id: uuid.UUID) -> None:
+        """Suhbatni (va xabarlarini — CASCADE) o'chiradi. Mijoz saqlanadi."""
+        conv = await self.get_conversation(conversation_id)
+        await self.repo.db.delete(conv)
+        await self.repo.db.commit()
+
+    async def delete_customer(self, customer_id: uuid.UUID) -> None:
+        """Mijozni to'liq o'chiradi (suhbat+xabar+lokatsiya bilan). Buyurtmasi bo'lsa RAD etiladi."""
+        from sqlalchemy import delete, func, select
+
+        from app.modules.delivery.models import CustomerLocation
+        from app.modules.inbox.models import Conversation
+        from app.modules.orders.models import Order
+
+        customer = await self.get_customer(customer_id)
+        order_cnt = await self.repo.db.scalar(
+            select(func.count()).select_from(Order).where(Order.customer_id == customer_id)
+        )
+        if order_cnt:
+            raise AppError(
+                f"Bu mijozning {order_cnt} ta buyurtmasi bor — o'chirib bo'lmaydi. "
+                "Avval buyurtmalarni bekor qiling yoki faqat suhbatni o'chiring."
+            )
+        # suhbatlar (xabarlar CASCADE) + lokatsiyalar, so'ng mijoz
+        for conv in await self.repo.db.scalars(
+            select(Conversation).where(Conversation.customer_id == customer_id)
+        ):
+            await self.repo.db.delete(conv)
+        await self.repo.db.execute(delete(CustomerLocation).where(CustomerLocation.customer_id == customer_id))
+        await self.repo.db.delete(customer)
+        await self.repo.db.commit()
+
     # ---------- Chiquvchi xabar (umumiy) ----------
     async def _send_outbound(
         self,

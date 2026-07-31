@@ -30,6 +30,9 @@ class InboxRepository:
         )
         return res.scalar_one_or_none()
 
+    async def get_customer_by_id(self, customer_id: uuid.UUID) -> Customer | None:
+        return await self.db.get(Customer, customer_id)
+
     # ---------- Conversation ----------
     async def get_open_conversation(self, customer_id: uuid.UUID, channel: str) -> Conversation | None:
         res = await self.db.execute(

@@ -321,3 +321,20 @@ ro'yxati** beriladi (masalan `["16","16.5","17","17.5","18"]`). Bo'sh/`null` —
   `{"detail":"Bu kategoriyada mavjud o'lchamlar: 16, 16.5, 17, 17.5, 18. '20' o'lchami mavjud emas."}`.
   `available_sizes` bo'sh bo'lsa — har qanday o'lcham qabul qilinadi (eski xulq o'zgarmaydi).
 - Mahsulot javobida ham (`ProductOut`/AI brief) shu kategoriyaning o'lchamlari ko'rinadi.
+---
+
+# Chat CRUD (inbox) — mijoz/suhbat qo'lda boshqarish (2026-07-31)
+
+GET/POST'dan tashqari endi EDIT va DELETE ham bor. Auth: `Bearer`. Ruxsat: `conversations:update`.
+
+| Metod | Endpoint | Vazifa |
+|---|---|---|
+| PATCH | `/inbox/customers/{customer_id}` | Mijoz ism/telefonini qo'lda yozish: `{ "full_name"?, "phone"? }` → `CustomerOut` |
+| DELETE | `/inbox/conversations/{conversation_id}` | Suhbat + xabarlarini o'chirish (mijoz saqlanadi) → `204` |
+| DELETE | `/inbox/customers/{customer_id}` | Mijozni to'liq o'chirish (suhbat+xabar+lokatsiya) → `204`. Buyurtmasi bo'lsa → `400` |
+
+- `PATCH /inbox/customers/{id}` partial (faqat berilgan maydon). Noma'lum maydon → `422` (jim tashlanmaydi).
+- `CustomerOut` endi `phone: string|null` ham qaytaradi (`GET /inbox/conversations` ichidagi `customer` obyektда ham).
+- Topilmasa → `404`.
+
+Misol: operator suhbatда "mijoz" o'rniga ism yozib qo'yishi — `PATCH /inbox/customers/{id} {"full_name":"Asad"}`.

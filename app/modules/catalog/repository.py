@@ -204,6 +204,26 @@ class CatalogRepository:
         )
         return list(res.scalars().all())
 
+    async def list_active_story_products(self) -> list[Product]:
+        """Aktiv (muddati o'tmagan) STORY biriktirilgan mahsulotlar — story-javob fallback uchun.
+
+        IG story-javobdagi story ID (webhook) permalink'dagi ID'dan farq qiladi, shu sabab exact
+        match ishlamaydi; agar aktiv story faqat BITTA mahsulotда bo'lsa, o'shanga bog'lanadi.
+        """
+        now = datetime.now(timezone.utc)
+        res = await self.db.execute(
+            select(Product)
+            .options(*_PRODUCT_LOADERS)
+            .join(ProductMedia, ProductMedia.product_id == Product.id)
+            .where(
+                Product.deleted_at.is_(None),
+                ProductMedia.media_type == "story",
+                ProductMedia.is_active.is_(True),
+                or_(ProductMedia.expires_at.is_(None), ProductMedia.expires_at > now),
+            )
+        )
+        return list(res.scalars().unique().all())
+
     async def categories_with_stock(self) -> list[tuple]:
         """Zaxirada mahsuloti bor kategoriyalar: [(category, in_stock_product_soni), ...].
 

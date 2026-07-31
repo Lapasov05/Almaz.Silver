@@ -158,12 +158,14 @@ async def _instagram_context(db, conv) -> str | None:
     if latest is None:
         return None
     ref = None
+    is_story_reply = False
     for att in (latest.attachments or []):
         if not isinstance(att, dict):
             continue
         # Bizning story'ga javob (reply_to.story) — media_id
         if att.get("type") == "ig_story" and att.get("story_ref"):
             ref = att["story_ref"]
+            is_story_reply = True
             break
         # Mijoz postni/reelni ULASHsa: attachment url = IG permalink (share/ig_reel/story_mention).
         # Faqat haqiqiy /p/·/reel/·/stories/ havolasini olamiz (rasm CDN url'ini emas).
@@ -175,7 +177,14 @@ async def _instagram_context(db, conv) -> str | None:
         ref = latest.content
     if ref is None:
         return None
-    product = await CatalogService(CatalogRepository(db)).resolve_instagram_media(ref)
+    catalog_repo = CatalogRepository(db)
+    product = await CatalogService(catalog_repo).resolve_instagram_media(ref)
+    if product is None and is_story_reply:
+        # Story-javob: webhook story ID permalink ID'dan farq qiladi -> exact match ishlamaydi.
+        # Aktiv (muddati o'tmagan) story faqat BITTA mahsulotда bo'lsa -> o'shanga bog'laymiz.
+        story_products = await catalog_repo.list_active_story_products()
+        if len(story_products) == 1:
+            product = story_products[0]
     if product is None:
         return await get_ai_text(db, "ai_ctx_instagram_not_found")
     avail = product.available

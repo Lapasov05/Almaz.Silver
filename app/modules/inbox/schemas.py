@@ -22,7 +22,16 @@ class CustomerOut(BaseModel):
     external_id: str
     username: str | None
     full_name: str | None
+    phone: str | None
     language: str
+
+
+class CustomerUpdate(BaseModel):
+    """Mijoz ma'lumotini qo'lda tahrirlash (operator ism/telefon yozadi). Noma'lum maydon -> 422."""
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=32)
 
 
 class ConversationOut(BaseModel):
