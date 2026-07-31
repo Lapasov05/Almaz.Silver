@@ -56,6 +56,10 @@ reset-data: ## DRY-RUN: user/role/config/reference'dan tashqari nima o'chishini 
 	$(DC) exec -T api python -m app.reset_data
 reset-data-confirm: ## HAQIQIY o'chirish: user/role/config/reference qoladi, qolgan HAMMA ma'lumot o'chadi
 	$(DC) exec -T -e RESET_CONFIRM=yes api python -m app.reset_data
+reset-chats: ## DRY-RUN: nechta suhbat+xabar o'chishini ko'rsatadi (mijoz/buyurtma saqlanadi)
+	$(DC) exec -T api python -m app.reset_chats
+reset-chats-confirm: ## HAQIQIY: barcha suhbat+xabarni o'chiradi (mijoz/buyurtma saqlanadi, inbox bo'shaydi)
+	$(DC) exec -T -e RESET_CHATS_CONFIRM=yes api python -m app.reset_chats
 seed: ## Asosiy seed (rol/permission/settings/admin)
 	$(DC) exec -T api python -m app.seed
 demo-seed: ## Demo ma'lumot (12 mahsulot, 7 buyurtma, ...)
