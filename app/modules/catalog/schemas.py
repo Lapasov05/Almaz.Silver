@@ -40,6 +40,9 @@ class ReferenceOut(BaseModel):
 
 # ---------- Category ----------
 class CategoryCreate(BaseModel):
+    # requires_box YOZILMAYDI (hisoblanadi: kategoriyada quti bo'lsa true). Yuborilsa -> 422.
+    model_config = ConfigDict(extra="forbid")
+
     name_uz: str = Field(min_length=1, max_length=150)
     name_ru: str | None = Field(default=None, max_length=150)
     slug: str | None = Field(default=None, max_length=150)  # bo'sh -> name_uz'dan
@@ -50,6 +53,8 @@ class CategoryCreate(BaseModel):
 
 
 class CategoryUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # requires_box va noma'lum maydon -> 422 (jim tashlanmaydi)
+
     name_uz: str | None = Field(default=None, max_length=150)
     name_ru: str | None = Field(default=None, max_length=150)
     slug: str | None = Field(default=None, max_length=150)
@@ -268,9 +273,9 @@ class InstagramMediaOut(BaseModel):
     caption: str | None
     status: str                # draft | scheduled | published
     scheduled_at: datetime | None
-    like_count: int
-    view_count: int
-    comment_count: int
+    like_count: int | None     # NULL = hali o'lchanmagan (0 = o'lchangan, ko'rilmagan)
+    view_count: int | None
+    comment_count: int | None
     is_active: bool
     is_expired: bool           # story muddati o'tganmi
     expires_at: datetime | None

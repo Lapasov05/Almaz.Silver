@@ -351,9 +351,10 @@ class ProductMedia(UUIDMixin, TimestampMixin, Base):
     # status: draft (qoralama) | scheduled (rejalashtirilgan) | published (e'lon qilingan)
     status: Mapped[str] = mapped_column(String(20), server_default="published", nullable=False)
     scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    like_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
-    view_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
-    comment_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    # engagement: NULL = hali o'lchanmagan (IG'dan olinmagan); son = o'lchangan. 0 emas!
+    like_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    view_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    comment_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     product: Mapped["Product"] = relationship(back_populates="media")
 

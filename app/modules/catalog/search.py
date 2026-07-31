@@ -9,6 +9,8 @@ _SHORTCODE_RE = re.compile(
 )
 # Instagram story URL: instagram.com/stories/<username>/<media_id>/ -> media_id (raqam)
 _STORY_RE = re.compile(r"instagram\.com/stories/[^/]+/(\d+)", re.IGNORECASE)
+# Reel (video) URL — media_type=reel qilib ajratamiz (post'dan farqli)
+_REEL_RE = re.compile(r"instagram\.com/(?:reel|reels)/([A-Za-z0-9_-]+)", re.IGNORECASE)
 
 _SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
 
@@ -31,6 +33,9 @@ def extract_instagram_ref(value: str) -> tuple[str, str] | None:
     story = extract_story_ref(value)
     if story:
         return ("story", story)
+    reel = _REEL_RE.search(value)
+    if reel:
+        return ("reel", reel.group(1))
     sc = extract_shortcode(value)
     if sc:
         return ("post", sc)

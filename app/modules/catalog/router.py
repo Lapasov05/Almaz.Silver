@@ -3,6 +3,7 @@
 Barcha ro'yxat (GET) endpointlari: pagination `{items,total,limit,offset}` + filtrlar.
 """
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Query
@@ -225,10 +226,18 @@ async def list_instagram_media(product_id: uuid.UUID, service: CatalogService = 
 async def list_all_instagram_media(
     product_id: uuid.UUID | None = None,
     status: str | None = None,
+    media_type: str | None = None,          # post | reel | story
+    date_from: datetime | None = None,      # created_at >= date_from
+    order: str = "-created_at",             # -created_at | created_at | -like_count | scheduled_at ...
+    limit: int = 100,
+    offset: int = 0,
     service: CatalogService = Depends(svc),
 ):
-    """Global IG kontent ro'yxati — `?product_id` va/yoki `?status` (draft/scheduled/published) filtri bilan."""
-    items = await service.list_all_instagram_media(product_id=product_id, status=status)
+    """Global IG kontent ro'yxati — filtr (`product_id`/`status`/`media_type`/`date_from`) + `order` + pagination."""
+    items = await service.list_all_instagram_media(
+        product_id=product_id, status=status, media_type=media_type,
+        date_from=date_from, order=order, limit=limit, offset=offset,
+    )
     return [InstagramMediaOut.model_validate(m) for m in items]
 
 

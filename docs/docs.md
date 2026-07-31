@@ -387,3 +387,20 @@ Frontend oldindan biladi: bu mahsulotga buyurtmada quti (rang) majburiymi.
   ("Iltimos, ... uchun quti rangini tanlang"). `false` bo'lsa quti so'ralmaydi (buyurtma o'tadi — bu to'g'ri).
 - Frontend UX: `requires_box=true` → mahsulot/checkout formasida quti rangini MAJBURIY tanlating
   (`GET /catalog/categories/{id}/boxes` bilan ranglarni oling); `false` → quti maydonini ko'rsatmang.
+
+---
+
+# Tuzatishlar (2026-07-31) — category 500, requires_box, IG media
+
+1) 🔴 REGRESSIYA TUZATILDI: `POST/PATCH /catalog/categories` → 500 (requires_box column_property yangi
+   obyektда yuklanmagani sabab). Endi create/update'да `refresh` bilan qayta yuklanadi — 200 qaytadi.
+2) `requires_box` — HISOBLANADIGAN maydon (settable emas): kategoriyada faol+zaxirada quti bo'lsa `true`.
+   - Uni YOZIB bo'lmaydi: `CategoryCreate/Update`ga yuborilsa → `422` (jim tashlanmaydi).
+   - Kategoriyani "box-requiring" qilish: unga QUTI qo'shing — `POST /catalog/categories/{id}/boxes`
+     (rang + zaxira). Shundan so'ng `requires_box=true` bo'ladi va `box_id`siz buyurtma → `400`.
+   - Buyurtma tekshiruvi ishlaydi; jonlida 200 chiqishi — kategoriyada quti yo'qligidan (to'g'ri).
+3) `GET /catalog/instagram-media` — endi to'liq: `product_id`, `status`, `media_type` (post|reel|story),
+   `date_from` (created_at>=), `order` (`-created_at`|`created_at`|`-like_count`|`scheduled_at`...),
+   `limit`, `offset`. (Reel endi `media_type=reel` bo'lib ajratiladi.)
+4) Engagement (`like_count`/`view_count`/`comment_count`) endi `int | null`: **NULL = hali o'lchanmagan**
+   (IG'dan ulanmagan), son = o'lchangan (`0` = ko'rilmagan). Frontend ikkovини ajrata oladi.

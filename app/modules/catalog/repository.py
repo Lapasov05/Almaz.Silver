@@ -341,16 +341,35 @@ class CatalogRepository:
         )
         return list(res.scalars().all())
 
+    # Global IG kontent ro'yxatida tartiblanadigan maydonlar (xavfsiz — foydalanuvchi kiritmasin)
+    _IG_SORT_FIELDS = {
+        "created_at": ProductMedia.created_at,
+        "scheduled_at": ProductMedia.scheduled_at,
+        "like_count": ProductMedia.like_count,
+        "view_count": ProductMedia.view_count,
+        "comment_count": ProductMedia.comment_count,
+    }
+
     async def list_all_ig_media(
-        self, *, product_id: uuid.UUID | None = None, status: str | None = None
+        self, *, product_id=None, status=None, media_type=None, date_from=None,
+        order: str = "-created_at", limit: int = 100, offset: int = 0,
     ) -> list[ProductMedia]:
-        """Global IG kontent ro'yxati — mahsulot/holat bo'yicha filtr (server-side, N+1'siz)."""
+        """Global IG kontent ro'yxati — filtr (product_id/status/media_type/date_from) + sort + pagination."""
         stmt = select(ProductMedia).where(ProductMedia.media_type.in_(("post", "reel", "story")))
         if product_id is not None:
             stmt = stmt.where(ProductMedia.product_id == product_id)
         if status is not None:
             stmt = stmt.where(ProductMedia.status == status)
-        res = await self.db.execute(stmt.order_by(ProductMedia.created_at.desc()))
+        if media_type is not None:
+            stmt = stmt.where(ProductMedia.media_type == media_type)
+        if date_from is not None:
+            stmt = stmt.where(ProductMedia.created_at >= date_from)
+        # sort: "-field" -> desc, "field" -> asc. Noma'lum maydon -> created_at desc (xavfsiz default)
+        desc = order.startswith("-")
+        col = self._IG_SORT_FIELDS.get(order.lstrip("-"), ProductMedia.created_at)
+        stmt = stmt.order_by(col.desc() if desc else col.asc())
+        stmt = stmt.limit(max(1, min(limit, 200))).offset(max(0, offset))
+        res = await self.db.execute(stmt)
         return list(res.scalars().all())
 
     # ---------- Search ----------

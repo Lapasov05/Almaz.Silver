@@ -96,6 +96,8 @@ class CatalogService:
                             available_sizes=data.available_sizes)
         await self.repo.add(category)
         await self.repo.db.commit()
+        # requires_box (column_property) yangi obyektда yuklanmagan — refresh bilan SELECT'дан olamiz
+        await self.repo.db.refresh(category)
         return category
 
     async def list_categories(self, *, parent_id, q, pp: PageParams):
@@ -112,6 +114,7 @@ class CatalogService:
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(category, field, value)
         await self.repo.db.commit()
+        await self.repo.db.refresh(category)  # requires_box qayta hisoblansin
         return category
 
     async def delete_category(self, category_id: uuid.UUID) -> None:
@@ -452,11 +455,9 @@ class CatalogService:
             raise NotFoundError("Instagram media topilmadi")
         return media
 
-    async def list_all_instagram_media(
-        self, *, product_id: uuid.UUID | None = None, status: str | None = None
-    ) -> list[ProductMedia]:
-        """Global IG kontent ro'yxati — mahsulot va/yoki holat bo'yicha filtr (klientda N+1'siz)."""
-        return await self.repo.list_all_ig_media(product_id=product_id, status=status)
+    async def list_all_instagram_media(self, **filters) -> list[ProductMedia]:
+        """Global IG kontent ro'yxati — filtr (product_id/status/media_type/date_from) + sort + pagination."""
+        return await self.repo.list_all_ig_media(**filters)
 
     async def list_instagram_media(self, product_id: uuid.UUID) -> list[ProductMedia]:
         await self.get_product(product_id)
