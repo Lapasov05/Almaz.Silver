@@ -23,10 +23,11 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    exists,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 
 from app.core.base_model import Base, TimestampMixin, UUIDMixin
 
@@ -199,6 +200,11 @@ class Product(UUIDMixin, TimestampMixin, Base):
             return self.category.available_sizes
         return None
 
+    @property
+    def requires_box(self) -> bool:
+        """Bu mahsulotga buyurtmada quti (rang) MAJBURIYmi — kategoriyada zaxirada quti bo'lsa True."""
+        return bool(self.category is not None and self.category.requires_box)
+
 
 class Variant(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "variant"
@@ -262,6 +268,21 @@ class Box(UUIDMixin, TimestampMixin, Base):
     @property
     def is_free(self) -> bool:
         return self.price == 0
+
+
+# Kategoriyada quti MAJBURIYmi — kategoriyada faol, ZAXIRADA bor (available>0) quti bo'lsa True.
+# Buyurtmada quti majburiyligi shu shart bilan tekshiriladi; frontend oldindan bilishi uchun.
+Category.requires_box = column_property(
+    exists()
+    .where(
+        Box.category_id == Category.id,
+        Box.is_active.is_(True),
+        Box.deleted_at.is_(None),
+        Box.stock_qty > Box.reserved_qty,
+    )
+    .correlate_except(Box),
+    deferred=False,
+)
 
 
 class BoxMedia(UUIDMixin, TimestampMixin, Base):

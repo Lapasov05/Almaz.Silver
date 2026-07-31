@@ -68,6 +68,7 @@ class CategoryOut(BaseModel):
     parent_id: uuid.UUID | None
     requires_ring_size: bool
     available_sizes: list[str] | None
+    requires_box: bool          # kategoriyada quti majburiymi (zaxirada quti bor bo'lsa)
 
 
 # ---------- Variant ----------
@@ -351,6 +352,7 @@ class ProductOut(BaseModel):
     available: int                  # umumiy mavjud zaxira
     requires_ring_size: bool        # buyurtmada o'lcham kerakmi (kategoriyadan)
     available_sizes: list[str] | None  # kategoriyaga bog'langan o'lchamlar (uzuk bo'lsa); bo'sh -> cheklovsiz
+    requires_box: bool              # quti (rang) majburiymi (kategoriyada zaxirada quti bor bo'lsa)
     gender: ReferenceOut | None
     material: ReferenceOut | None
     stone: ReferenceOut | None

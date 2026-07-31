@@ -372,3 +372,18 @@ ro'yxat ham qoladi: `GET /catalog/products/{id}/instagram`.)
 - **Tahrirlash** `PATCH /catalog/instagram-media/{id}`: `is_active?, image_url?, caption?, status?,
   scheduled_at?, like_count?, view_count?, comment_count?`. Noma'lum maydon → `422`.
 - Status: `draft` (qoralama) · `scheduled` (rejalashtirilgan, `scheduled_at` bilan) · `published` (e'lon qilingan).
+
+---
+
+# requires_box — quti majburiyligi (CategoryOut + ProductOut) (2026-07-31)
+
+`available_sizes` kabi, endi `requires_box: boolean` **CategoryOut** va **ProductOut** javoblarida bor.
+Frontend oldindan biladi: bu mahsulotga buyurtmada quti (rang) majburiymi.
+
+- **Ma'nosi:** kategoriyada faol va ZAXIRADA (available>0) quti bo'lsa `true`; aks holda `false`.
+  Bu buyurtmadagi tekshiruv bilan bir xil — server-side hisoblanadi (subquery, N+1'siz).
+- `GET /catalog/categories` / `{id}` → `requires_box`. `GET /catalog/products` / `{id}` → `requires_box`.
+- **Buyurtma tekshiruvi tasdiqlandi:** `requires_box=true` bo'lsa `box_id`siz buyurtma → `400`
+  ("Iltimos, ... uchun quti rangini tanlang"). `false` bo'lsa quti so'ralmaydi (buyurtma o'tadi — bu to'g'ri).
+- Frontend UX: `requires_box=true` → mahsulot/checkout formasida quti rangini MAJBURIY tanlating
+  (`GET /catalog/categories/{id}/boxes` bilan ranglarni oling); `false` → quti maydonini ko'rsatmang.
