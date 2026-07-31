@@ -145,11 +145,34 @@ Endi 405 EMAS. Ruxsat: `orders:update`. Body (partial — faqat berilgan maydon 
 Javob `200` — to'liq yangilangan `OrderOut` (endi `notes: string|null` ham qaytadi).
 
 - **Status** bu yerda EMAS → `POST /orders/{id}/status`. **Bekor** → `POST /orders/{id}/cancel`.
-- **Item (mahsulot/soni/o'lcham/narx) tahrirlash v1'da YO'Q** (zaxira/summa ta'siri) — kerak bo'lsa
-  buyurtmani bekor qilib qayta yarating; keyingi versiyada qo'shsa bo'ladi.
-- Xatolar: mijoz/operator topilmasa `404`; ruxsat yo'q `403`; noto'g'ri body `422`.
+  **Tarkib (mahsulot/soni/o'lcham)** → `PATCH /orders/{id}/items` (§6.1).
+- ⚠️ **Qo'llab-quvvatlanmaydigan maydon JIM tashlanmaydi** → `422 extra_forbidden`. Ya'ni bu PATCH'ga
+  `status`, `items` yoki noma'lum maydon yuborsangiz `422` qaytadi (avvalgi "200 lekin o'zgarmaydi" tuzatildi).
+- Xatolar: mijoz/operator topilmasa `404`; ruxsat yo'q `403`; noto'g'ri/ortiqcha maydon `422`.
 
-Frontend: `VITE_FEATURE_ORDER_EDITING` flagini yoqing — customer/operator/notes tahrirlash ishlaydi.
+### 6.1. Buyurtma tarkibini tahrirlash — `PATCH /orders/{order_id}/items`  (✅ BAJARILDI)
+
+Mahsulot qo'shish/o'chirish, miqdor, o'lcham, quti, gravyurka — **to'liq almashtirish** (replace) semantikasi:
+yuborilgan ro'yxat buyurtmaning YANGI to'liq tarkibi bo'ladi. Zaxira rezervi (`reserved_qty`) QAYTA hisoblanadi.
+Ruxsat: `orders:update`. `PATCH /orders/{id}/items` body:
+```json
+{
+  "items": [
+    { "variant_id": "uuid", "quantity": 2, "ring_size": "18", "engraving_text": "Ali", "box_id": "uuid" },
+    { "variant_id": "uuid", "quantity": 1 }
+  ]
+}
+```
+Javob `200` — yangilangan `OrderOut` (yangi `items`, `items_total`, `grand_total`).
+
+- **Faqat to'lov TASDIQLANMAGAN** holatda ishlaydi: `draft/pending/waiting_payment/payment_review`.
+  `confirmed` va undan keyin (stock kamaygan/yetkazish boshlangan) → `400` (bekor qilib qayta yarating).
+- Har item `create_order` bilan bir xil tekshiriladi: zaxira yetarli, o'lcham kategoriya ro'yxatida,
+  gravyurka belgi-limiti, quti majburiy (kategoriyada quti bo'lsa `box_id` kerak). Xato → `400` (aniq sabab).
+- Bo'sh `items` → `422`; noma'lum maydon → `422`.
+
+Frontend: `VITE_FEATURE_ORDER_EDITING` — customer/operator/notes uchun `PATCH /orders/{id}`,
+tarkib (satrlar/miqdor/o'lcham) uchun `PATCH /orders/{id}/items`. Status uchun `POST /orders/{id}/status`.
 
 ---
 

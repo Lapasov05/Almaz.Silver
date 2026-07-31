@@ -76,6 +76,27 @@ class OrdersService:
             )
             prev.status = OrderStatus.cancelled.value
 
+        order = Order(
+            order_no=await self._generate_order_no(),
+            customer_id=customer_id,
+            status=OrderStatus.pending.value,
+            created_by_ai=created_by_ai,
+        )
+        order.items_total = await self._process_items(order, items)
+        order.grand_total = order.items_total  # delivery_fee lokatsiyadan keyin qo'shiladi (hozir 0)
+        # Tarixni flush'dan OLDIN qo'shamiz (transient obyektда lazy-load bo'lmaydi)
+        order.history.append(
+            OrderStatusHistory(from_status=None, to_status=OrderStatus.pending.value, changed_by=changed_by)
+        )
+        await self.repo.add(order)
+        await self.db.commit()
+        return await self.get(order.id)
+
+    async def _process_items(self, order: Order, items) -> Decimal:
+        """Buyurtma itemlarini yaratadi: validatsiya + zaxira rezerv + narx (gravyurka/box/o'lcham).
+
+        `order.items` ga qo'shadi, items_total qaytaradi. create_order VA replace_items ishlatadi.
+        """
         settings_repo = SettingsRepository(self.db)
         # Bonuslar global (TZ 18): yaratish vaqtidagi nusxa
         bonus_setting = await settings_repo.get("bonus_items")
@@ -102,12 +123,6 @@ class OrdersService:
             bool(boxes_enabled_setting.value) if boxes_enabled_setting is not None else False
         )
 
-        order = Order(
-            order_no=await self._generate_order_no(),
-            customer_id=customer_id,
-            status=OrderStatus.pending.value,
-            created_by_ai=created_by_ai,
-        )
         items_total = Decimal("0")
 
         for it in items:
@@ -216,16 +231,7 @@ class OrdersService:
                 )
             )
 
-        order.items_total = items_total
-        order.grand_total = items_total  # delivery_fee lokatsiyadan keyin qo'shiladi
-        # Tarixni flush'dan OLDIN qo'shamiz (transient obyektда lazy-load bo'lmaydi)
-        order.history.append(
-            OrderStatusHistory(from_status=None, to_status=OrderStatus.pending.value, changed_by=changed_by)
-        )
-
-        await self.repo.add(order)
-        await self.db.commit()
-        return await self.get(order.id)
+        return items_total
 
     async def get(self, order_id: uuid.UUID) -> Order:
         order = await self.repo.get(order_id)
@@ -280,6 +286,36 @@ class OrdersService:
             order.assigned_operator_id = op_id
         if "notes" in fields:
             order.notes = fields["notes"]
+        await self.db.commit()
+        return await self.get(order_id)
+
+    # Tarkibni (item) tahrirlash faqat to'lov TASDIQLANMAGAN holatlarда — bunда faqat rezerv (reserved_qty)
+    # ta'sirlanadi (stock_qty hali kamaymagan). confirmed+ da tahrirlash xavfli -> rad etamiz.
+    _ITEMS_EDITABLE = {
+        OrderStatus.draft, OrderStatus.pending, OrderStatus.waiting_payment, OrderStatus.payment_review,
+    }
+
+    async def replace_items(self, order_id: uuid.UUID, items, *, changed_by: uuid.UUID | None = None) -> Order:
+        """Buyurtma TARKIBINI to'liq almashtiradi (mahsulot/soni/o'lcham/quti/gravyurka) + zaxira rezervini
+        QAYTA hisoblaydi. `items` — buyurtmaning yangi to'liq ro'yxati (replace semantikasi)."""
+        if not items:
+            raise AppError("Buyurtmada kamida bitta mahsulot bo'lishi kerak")
+        order = await self.get(order_id)
+        if OrderStatus(order.status) not in self._ITEMS_EDITABLE:
+            raise AppError(
+                f"Bu holatda buyurtma tarkibini tahrirlab bo'lmaydi (holat={order.status}). "
+                "To'lov tasdiqlangan/yetkazish boshlangan — bekor qilib qayta yarating."
+            )
+        # 1) eski itemlarning rezervini bo'shatamiz (reserved_qty--; variant/combo + box)
+        await self._release_reservation(order)
+        # 2) eski itemlarni o'chiramiz
+        for old in list(order.items):
+            await self.db.delete(old)
+        order.items.clear()
+        await self.db.flush()
+        # 3) yangi itemlar: validatsiya + rezerv + narx (create_order bilan bir xil qoidalar)
+        order.items_total = await self._process_items(order, items)
+        order.grand_total = order.items_total + (order.delivery_fee or Decimal("0"))
         await self.db.commit()
         return await self.get(order_id)
 

@@ -33,14 +33,23 @@ class OrderStatusUpdate(BaseModel):
 
 
 class OrderUpdate(BaseModel):
-    """Buyurtmani tahrirlash (PATCH). Faqat berilgan maydonlar yangilanadi (partial).
+    """Buyurtmaning SKALAR maydonlarini tahrirlash (PATCH). Faqat berilgan maydonlar yangilanadi.
 
-    Statusni bu yerda EMAS — POST /orders/{id}/status; bekor — POST /orders/{id}/cancel.
-    Item (mahsulot/soni/narx) tahrirlash v1'da yo'q (zaxira ta'siri) — bekor qilib qayta yarating.
+    Qo'llab-quvvatlanmaydigan maydon (status, items, ...) yuborilsa -> 422 (jim tashlanmaydi).
+    Status -> POST /orders/{id}/status; bekor -> POST /orders/{id}/cancel; tarkib -> PATCH /orders/{id}/items.
     """
+    model_config = ConfigDict(extra="forbid")  # noma'lum maydon -> 422
+
     customer_id: uuid.UUID | None = None
     assigned_operator_id: uuid.UUID | None = None
     notes: str | None = Field(default=None, max_length=2000)
+
+
+class OrderItemsUpdate(BaseModel):
+    """Buyurtma TARKIBINI to'liq almashtirish (PATCH /orders/{id}/items). Zaxira rezervi qayta hisoblanadi."""
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[OrderItemCreate] = Field(min_length=1)
 
 
 class OrderItemOut(BaseModel):

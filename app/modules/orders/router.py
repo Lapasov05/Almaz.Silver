@@ -10,7 +10,14 @@ from app.core.deps import require_permission
 from app.core.pagination import Page, PageParams, page_params
 from app.modules.identity.models import User
 from app.modules.orders.models import OrderStatus
-from app.modules.orders.schemas import OrderCancel, OrderCreate, OrderOut, OrderStatusUpdate, OrderUpdate
+from app.modules.orders.schemas import (
+    OrderCancel,
+    OrderCreate,
+    OrderItemsUpdate,
+    OrderOut,
+    OrderStatusUpdate,
+    OrderUpdate,
+)
 from app.modules.orders.service import OrdersService
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -72,11 +79,24 @@ async def update_order(
     service: OrdersService = Depends(get_orders_service),
     user: User = Depends(require_permission("orders:update")),
 ) -> OrderOut:
-    """Buyurtmani tahrirlaydi (partial): customer_id, assigned_operator_id, notes.
+    """Buyurtmaning skalar maydonlarini tahrirlaydi: customer_id, assigned_operator_id, notes.
 
-    Status → /status; bekor → /cancel; item (mahsulot/soni/narx) — hozircha yo'q (bekor+qayta yarating).
+    Status → /status; bekor → /cancel; TARKIB (mahsulot/soni/o'lcham) → PATCH /orders/{id}/items.
+    Qo'llab-quvvatlanmaydigan maydon yuborilsa → 422 (jim tashlanmaydi).
     """
     return OrderOut.model_validate(await service.update_order(order_id, payload))
+
+
+@router.patch("/{order_id}/items", response_model=OrderOut)
+async def replace_order_items(
+    order_id: uuid.UUID,
+    payload: OrderItemsUpdate,
+    service: OrdersService = Depends(get_orders_service),
+    user: User = Depends(require_permission("orders:update")),
+) -> OrderOut:
+    """Buyurtma TARKIBINI to'liq almashtiradi (mahsulot qo'shish/o'chirish, soni, o'lcham, quti, gravyurka)
+    + zaxira rezervini QAYTA hisoblaydi. Faqat to'lov tasdiqlanmagan holatда ishlaydi (aks holda 400)."""
+    return OrderOut.model_validate(await service.replace_items(order_id, payload.items, changed_by=user.id))
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
