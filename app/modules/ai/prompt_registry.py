@@ -56,8 +56,10 @@ AI_PROMPTS: list[dict] = [
         "purpose": "Faol buyurtma 'waiting_payment' (manzil qabul qilingan, to'lov kutilmoqda) — keyingi qadam.",
         "used_in": "app/modules/ai/agent.py::_active_order_context (guide)",
         "placeholders": "",
-        "value": "Manzil qabul qilingan. To'lov kartasini bering (get_payment_card) va chek RASMINI so'rang. "
-                 "Mijoz RASM yuborsa — bu to'lov cheki, DARHOL submit_receipt chaqiring.",
+        "value": "Manzil qabul qilingan. AVVAL mijozning ISM-FAMILIYA va TELEFON raqami bor-yo'qligini tekshir "
+                 "— biror biri yo'q bo'lsa AVVAL o'shani so'ra (save_customer_name), to'lov kartasini BERMA. "
+                 "Ikkalasi ham bo'lsa: kartani ber (get_payment_card) va chek RASMINI so'ra. Mijoz RASM "
+                 "yuborsa — bu to'lov cheki, DARHOL submit_receipt chaqir.",
     },
     {
         "key": "ai_ctx_order_guide_payment_review",
@@ -200,6 +202,14 @@ AI_PROMPTS: list[dict] = [
                   "To'lov (mahsulotlar): {total} so'm\n"
                   "Karta: {card} ({holder})\n"
                   "To'lagach chek RASMINI shu yerga yuboring 📸"),
+    },
+    {
+        "key": "ai_msg_need_info_before_payment",
+        "purpose": "Manzil tasdiqlangач, lekin ism yoki telefon yetishmasa — karta O'RNIGA yetishgan "
+                   "ma'lumotni so'raydi (to'lovga o'tishdan oldin majburiy).",
+        "used_in": "app/modules/delivery/checkout.py::_send_payment_followup (gate)",
+        "placeholders": "{missing}",
+        "value": "Buyurtmani yakunlash uchun {missing} yuboring — so'ng to'lov kartasini beraman 😊",
     },
     {
         "key": "ai_msg_location_confirmed_nocard",

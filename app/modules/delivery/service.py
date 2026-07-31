@@ -190,6 +190,14 @@ class DeliveryService:
         )
         await self.repo.add(loc)
 
+        # Map formadagi telefonni mijoz profiliga ham yozamiz (to'lov oldidan majburiy ma'lumot)
+        if phone:
+            from app.modules.inbox.models import Customer
+
+            customer = await self.db.get(Customer, order.customer_id)
+            if customer is not None and not (customer.phone or "").strip():
+                customer.phone = phone[:32]
+
         delivery.zone = resolved_zone
         delivery.provider = provider
         delivery.location_type = location_type.value

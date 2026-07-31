@@ -54,12 +54,32 @@ async def _send_payment_followup(db: AsyncSession, order) -> None:
         from app.modules.ai.prompt_registry import get_ai_text
         from app.modules.delivery.repository import DeliveryRepository
 
-        total = f"{int(order.grand_total or 0):,}".replace(",", " ")  # yetkazish yo'q -> mahsulotlar summasi
-        card = await PaymentRepository(db).get_default_card()
-        # Zonaga qarab yetkazish MA'LUMOTI (Yandex / BTS) — pul buyurtmaga qo'shilmaydi
         delivery = await DeliveryRepository(db).get_by_order(order.id)
         loc_type = delivery.location_type if delivery is not None else None
         delivery_key = "ai_msg_delivery_bts" if loc_type == "BTS" else "ai_msg_delivery_tashkent"
+
+        # ‼️ MAJBURIY MA'LUMOT GATE: ism + telefon bo'lmasa KARTA (to'lov) BERILMAYDI.
+        # Lokatsiya allaqachon bor (bu funksiya location confirm'da chaqiriladi).
+        phone = (customer.phone or "").strip() or ((delivery.phone or "").strip() if delivery else "")
+        missing = []
+        if not (customer.full_name or "").strip():
+            missing.append("ism-familiyangizni")
+        if not phone:
+            missing.append("telefon raqamingizni")
+        if missing:
+            # Karta bermaymiz — yetishmagan ma'lumotni so'raymiz. Mijoz yuborgach AI kartani beradi.
+            ask = await get_ai_text(db, "ai_msg_need_info_before_payment", missing=" va ".join(missing))
+            await inbox.ai_send(conv, "\n\n".join([
+                await get_ai_text(db, "ai_msg_location_confirmed_head"),
+                await get_ai_text(db, delivery_key),
+                ask,
+            ]))
+            conv.ai_state = AiState.awaiting_payment.value
+            await db.commit()
+            return
+
+        total = f"{int(order.grand_total or 0):,}".replace(",", " ")  # yetkazish yo'q -> mahsulotlar summasi
+        card = await PaymentRepository(db).get_default_card()
         lines = [
             await get_ai_text(db, "ai_msg_location_confirmed_head"),
             await get_ai_text(db, delivery_key),
