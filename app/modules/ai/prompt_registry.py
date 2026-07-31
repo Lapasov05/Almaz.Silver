@@ -68,11 +68,51 @@ AI_PROMPTS: list[dict] = [
                  "yuborsa submit_receipt. Suhbatni tugatma, savoliga javob ber.",
     },
     {
+        "key": "ai_ctx_order_guide_confirmed",
+        "purpose": "Buyurtma 'confirmed' (to'lov tasdiqlangan, operator tayyorlamoqda) — AI mijozга tinchlik beradi.",
+        "used_in": "app/modules/ai/agent.py::_active_order_context (guide)",
+        "placeholders": "",
+        "value": "To'lov tasdiqlangan, buyurtma tayyorlanmoqda. Operator tez orada aloqaga chiqadi. Mijoz "
+                 "savol bersa javob ber; boshqa mahsulot so'rasa yordam ber.",
+    },
+    {
+        "key": "ai_ctx_order_guide_shipping",
+        "purpose": "Buyurtma 'shipping' (yo'lda) — mijoz 'oldim' desa complete_order; shikoyat -> raqam; savol -> javob.",
+        "used_in": "app/modules/ai/agent.py::_active_order_context (guide)",
+        "placeholders": "",
+        "value": "Buyurtma yo'lda. Mijoz buyumni OLGANINI aytsa ('oldim', 'yetib keldi', 'rahmat') — "
+                 "complete_order chaqir (buyurtma yakunlanadi) va minnatdorchilik bildir. Shikoyat/norozilik "
+                 "bo'lsa shikoyat raqamini ber. Oddiy savol bo'lsa javob ber. Boshqa mahsulot so'rasa — yordam ber.",
+    },
+    {
+        "key": "ai_ctx_order_guide_delivered",
+        "purpose": "Buyurtma 'delivered' — mijoz olganini tasdiqlasa complete_order.",
+        "used_in": "app/modules/ai/agent.py::_active_order_context (guide)",
+        "placeholders": "",
+        "value": "Buyurtma yetkazilgan. Mijoz olganini tasdiqlasa complete_order chaqir. Shikoyat bo'lsa "
+                 "shikoyat raqamini ber.",
+    },
+    {
         "key": "ai_ctx_order_guide_default",
         "purpose": "Faol buyurtma boshqa holatда — umumiy keyingi qadam ko'rsatmasi.",
         "used_in": "app/modules/ai/agent.py::_active_order_context (guide fallback)",
         "placeholders": "",
-        "value": "Buyurtmani yakunlashda davom et.",
+        "value": "Buyurtma jarayonda. Mijoz savoliga javob ber; boshqa mahsulot so'rasa yordam ber.",
+    },
+    {
+        "key": "ai_msg_order_shipping",
+        "purpose": "Buyurtma 'yo'lda' (shipping) statusiga o'tganda mijozga AVTOMATIK yuboriladigan xabar.",
+        "used_in": "app/modules/orders/service.py::set_status (shipping)",
+        "placeholders": "",
+        "value": "Buyurtmangiz yo'lga chiqdi! 🚚 Uni olganingizdan keyin, iltimos, shu yerda bizga xabar bering.",
+    },
+    {
+        "key": "ai_msg_payment_approved",
+        "purpose": "To'lov tasdiqlanganda mijozga yuboriladigan xabar (operator aloqaga chiqadi).",
+        "used_in": "app/modules/payments/service.py::approve",
+        "placeholders": "",
+        "value": "To'lovingiz tasdiqlandi! ✅ Operatorimiz siz bilan tez orada buyurtmangiz yuzasidan "
+                 "aloqaga chiqadi.",
     },
     {
         "key": "ai_ctx_order_receipt_hint",
@@ -123,11 +163,11 @@ AI_PROMPTS: list[dict] = [
     },
     {
         "key": "ai_msg_location_confirmed_head",
-        "purpose": "Mijoz manzilni web xarita orqali tasdiqlagach AVTOMATIK yuboriladigan xabarning boshi "
-                   "(manzil qabul qilindi + summa). Mijoz 'yubordim' deyishini kutmaydi.",
+        "purpose": "Mijoz manzilni web xarita orqali tasdiqlagach AVTOMATIK yuboriladigan xabarning boshi. "
+                   "Yetkazish puli OLINMAYDI — faqat mahsulotlar summasi. Mijoz 'yubordim' deyishini kutmaydi.",
         "used_in": "app/modules/delivery/checkout.py::_send_payment_followup",
-        "placeholders": "{fee} {total}",
-        "value": "Manzilingiz qabul qilindi ✅\nYetkazish: {fee} so'm. Jami to'lov: {total} so'm.",
+        "placeholders": "{total}",
+        "value": "Manzilingiz qabul qilindi ✅\nJami to'lov (mahsulotlar): {total} so'm.",
     },
     {
         "key": "ai_msg_location_confirmed_card",

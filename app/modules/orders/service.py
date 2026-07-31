@@ -1,4 +1,5 @@
 """orders Service qatlami — buyurtma yaratish + reservation + status tarixi (TZ 10)."""
+import logging
 import secrets
 import uuid
 from datetime import datetime, timezone
@@ -8,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError, NotFoundError
 from app.modules.catalog.repository import CatalogRepository
+
+logger = logging.getLogger(__name__)
 from app.modules.orders.models import (
     Order,
     OrderItem,
@@ -169,6 +172,14 @@ class OrdersService:
             box_id = None
             box_price = Decimal("0")
             box_label = None
+            # Quti MAJBURIY: kategoriyada faol qutilar bo'lsa, mijoz rang tanlashi shart
+            if boxes_enabled and it.box_id is None and product.category_id is not None:
+                cat_boxes = await self.catalog.list_active_boxes(product.category_id)
+                if any(b.available > 0 for b in cat_boxes):
+                    raise AppError(
+                        f"Iltimos, '{product.name_uz}' uchun quti rangini tanlang "
+                        f"(mavjud: {', '.join(b.name_uz for b in cat_boxes if b.available > 0)})."
+                    )
             if it.box_id is not None:
                 if not boxes_enabled:
                     raise AppError("Box (quti) xizmati hozircha o'chirilgan")
@@ -297,7 +308,27 @@ class OrdersService:
         order = await self.get(order_id)  # yo'q bo'lsa 404 "Buyurtma topilmadi"
         if order.status == to_status.value:
             return order  # idempotent — history yozilmaydi
-        return await self.change_status(order_id, to_status, changed_by=changed_by)
+        result = await self.change_status(order_id, to_status, changed_by=changed_by)
+        # Buyurtma yo'lga chiqqanda mijozga avtomatik xabar (best-effort)
+        if to_status == OrderStatus.shipping:
+            await self._notify_customer_status(result, "ai_msg_order_shipping")
+        return result
+
+    async def _notify_customer_status(self, order: Order, msg_key: str) -> None:
+        """Buyurtma statusi bo'yicha mijozga xabar (registrdagi matn). Best-effort — xato oqimni buzmaydi."""
+        try:
+            from app.modules.ai.prompt_registry import get_ai_text
+            from app.modules.inbox.models import Customer
+            from app.modules.inbox.repository import InboxRepository
+            from app.modules.inbox.service import InboxService
+
+            customer = await self.db.get(Customer, order.customer_id)
+            if customer is None:
+                return
+            text = await get_ai_text(self.db, msg_key)
+            await InboxService(InboxRepository(self.db)).notify_customer(order.customer_id, customer.channel, text)
+        except Exception:  # noqa: BLE001
+            logger.warning("status xabari yuborilmadi (order=%s)", order.id, exc_info=True)
 
     async def _release_reservation(self, order: Order) -> None:
         """Band qilingan zaxirani bo'shatadi (reserved_qty--), TZ 10. Variant/combo + box."""

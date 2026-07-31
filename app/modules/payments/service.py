@@ -119,7 +119,9 @@ class PaymentService:
             actor_id=reviewer_id, after={"status": "approved", "order_id": str(order.id)},
         )
         await self.db.commit()
-        await self._notify_customer(order.customer_id, "To'lovingiz tasdiqlandi! ✅ Buyurtmangiz tayyorlanmoqda.")
+        from app.modules.ai.prompt_registry import get_ai_text
+
+        await self._notify_customer(order.customer_id, await get_ai_text(self.db, "ai_msg_payment_approved"))
         return await self.get(payment_id)
 
     # ---------- Reject ----------

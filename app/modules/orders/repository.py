@@ -44,6 +44,24 @@ class OrdersRepository:
         )
         return res.scalar_one_or_none()
 
+    # AI kontekstи uchun kengroq to'plam: buyurtma yaratilgandan yakungacha (shipping ham kiradi).
+    # Terminal (cancelled/completed/refunded/returned) va draft — kirmaydi.
+    _CONTEXT_STATUSES = (
+        "pending", "waiting_payment", "payment_review",
+        "confirmed", "preparing", "packed", "shipping", "delivered",
+    )
+
+    async def get_current_order(self, customer_id: uuid.UUID) -> Order | None:
+        """AI konteksti uchun mijozning eng so'nggi 'joriy' buyurtmasi (yaratilgandan yakungacha)."""
+        res = await self.db.execute(
+            select(Order)
+            .options(*_ORDER_LOADERS)
+            .where(Order.customer_id == customer_id, Order.status.in_(self._CONTEXT_STATUSES))
+            .order_by(Order.created_at.desc())
+            .limit(1)
+        )
+        return res.scalar_one_or_none()
+
     async def list_active_orders(self, customer_id: uuid.UUID) -> list[Order]:
         """Mijozning barcha faol (to'lanmagan) buyurtmalari — supersede uchun."""
         res = await self.db.execute(

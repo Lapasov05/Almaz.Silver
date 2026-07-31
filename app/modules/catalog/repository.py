@@ -204,6 +204,28 @@ class CatalogRepository:
         )
         return list(res.scalars().all())
 
+    async def categories_with_stock(self) -> list[tuple]:
+        """Zaxirada mahsuloti bor kategoriyalar: [(category, in_stock_product_soni), ...].
+
+        Faqat faol (status=active, o'chirilmagan) mahsulot va uning available>0 bo'lgani hisobga olinadi.
+        AI kategoriya taklif qilishdan oldin shundan foydalanadi (bo'sh/zaxirasiz kategoriyani taklif qilmaydi).
+        """
+        res = await self.db.execute(
+            select(Product)
+            .options(selectinload(Product.variants), selectinload(Product.category))
+            .where(Product.deleted_at.is_(None), Product.status == "active")
+        )
+        counts: dict = {}
+        cats: dict = {}
+        for p in res.scalars().all():
+            if p.category is None or p.available <= 0:
+                continue
+            cid = p.category.id
+            cats[cid] = p.category
+            counts[cid] = counts.get(cid, 0) + 1
+        # ko'proq mahsulotli kategoriya oldinda
+        return sorted(((cats[cid], counts[cid]) for cid in cats), key=lambda x: -x[1])
+
     async def list_all_active_boxes(self) -> list[Box]:
         """Barcha kategoriyalardagi faol boxlar (mijoz umumiy 'qanday qutilaringiz bor' deb so'raganda)."""
         res = await self.db.execute(

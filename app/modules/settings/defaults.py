@@ -47,6 +47,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Global on/off. Narx/rang/zaxira har kategoriyada alohida (category bo'limi).
     "boxes_enabled": True,
 
+    # --- Shikoyat (buyurtma bo'yicha norozilik) telefon raqami ---
+    # Mijoz buyurtma bo'yicha shikoyat bildirsa AI shu raqamni beradi (o'zgartirilishi mumkin).
+    "complaint_phone": "774444413",
+
     # --- Garantiya (kafolat) ---
     # Global default: yoqish + muddat (oy) + matn. Mahsulotда `warranty_months` bo'lsa, o'sha ustun keladi.
     "warranty_enabled": True,

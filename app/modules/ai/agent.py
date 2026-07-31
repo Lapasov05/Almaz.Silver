@@ -98,7 +98,7 @@ async def _active_order_context(db, conv) -> str | None:
     from app.modules.catalog.repository import CatalogRepository
     from app.modules.orders.repository import OrdersRepository
 
-    order = await OrdersRepository(db).get_active_order(conv.customer_id)
+    order = await OrdersRepository(db).get_current_order(conv.customer_id)
     if order is None:
         return None
     catalog = CatalogRepository(db)
@@ -129,6 +129,10 @@ async def _active_order_context(db, conv) -> str | None:
     hint = ""
     if order.status in ("waiting_payment", "payment_review") and await _latest_incoming_has_image(db, conv.id):
         hint = await get_ai_text(db, "ai_ctx_order_receipt_hint")
+    # Shikoyat raqami — mijoz buyurtma bo'yicha norozilik bildirsa AI shu raqamni beradi
+    complaint = await _setting(db, "complaint_phone", "")
+    if complaint:
+        hint += f" [Shikoyat/norozilik bo'lsa mijozga bu raqamni ber: {complaint}]"
     return await get_ai_text(
         db, "ai_ctx_order",
         order_no=order.order_no, products=products, items_total=items_total,

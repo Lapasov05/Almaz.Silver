@@ -125,17 +125,15 @@ class DeliveryService:
         return in_district
 
     async def preview_location(self, raw_token: str, lat: Decimal | None, lng: Decimal | None) -> dict:
-        """1-qadam: zona + narx + (BTS bo'lsa) filiallar ro'yxati. Token YOPILMAYDI, DB o'zgarmaydi."""
+        """1-qadam: zona (operator ma'lumoti). Yetkazish puli OLINMAYDI (fee=0), filial tanlash yo'q.
+        Token YOPILMAYDI, DB o'zgarmaydi."""
         token = await self._validate_token(raw_token)  # faqat tekshiradi, yopmaydi
         order = await self.orders.get(token.order_id)
         if lat is None or lng is None:
             raise AppError("Lokatsiya (lat/lng) yuborilishi shart")
-        if is_in_tashkent(float(lat), float(lng)):
-            fee = await self._fee_for_zone(DeliveryZone.tashkent.value)
-            return {"order": order, "location_type": LocationType.toshkent, "fee": fee, "branches": []}
-        fee = await self._fee_for_zone(DeliveryZone.region.value)
-        return {"order": order, "location_type": LocationType.bts, "fee": fee,
-                "branches": await self._candidate_branches(lat, lng)}
+        loc = LocationType.toshkent if is_in_tashkent(float(lat), float(lng)) else LocationType.bts
+        # fee=0, branches=[] — uniform oqim (filial tanlash yo'q)
+        return {"order": order, "location_type": loc, "fee": Decimal("0"), "branches": []}
 
     async def confirm_location(
         self,
@@ -164,22 +162,23 @@ class DeliveryService:
             delivery = Delivery(order_id=token.order_id)
             await self.repo.add(delivery)
 
+        # Yetkazish puli OLINMAYDI (fee=0). Zona faqat operator ma'lumoti uchun aniqlanadi;
+        # filial tanlash yo'q (uniform oqim). Lokatsiya baribir saqlanadi.
+        fee = Decimal("0")
         if is_in_tashkent(float(lat), float(lng)):
             location_type = LocationType.toshkent
             resolved_zone = DeliveryZone.tashkent.value
             provider = DeliveryProvider.yandex.value
-            fee = await self._fee_for_zone(resolved_zone)
-            branch = None
         else:
             location_type = LocationType.bts
             resolved_zone = DeliveryZone.region.value
             provider = DeliveryProvider.bts.value
-            fee = await self._fee_for_zone(resolved_zone)
-            if bts_branch_id is None:
-                raise AppError("BTS filialini tanlang (bts_branch_id majburiy)")
+        # Filial berilsa saqlaymiz (ixtiyoriy), lekin talab qilmaymiz
+        branch = None
+        if bts_branch_id is not None:
             branch = await self.repo.get_bts_branch(bts_branch_id)
-            if branch is None or not branch.is_active:
-                raise AppError("Tanlangan BTS filiali topilmadi")
+            if branch is not None and not branch.is_active:
+                branch = None
 
         # --- Mijoz lokatsiyasini saqlaymiz (id bilan, qayta ishlatiladi) ---
         loc = CustomerLocation(

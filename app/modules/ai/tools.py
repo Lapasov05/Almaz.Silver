@@ -156,6 +156,18 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "list_categories",
+            "description": (
+                "Zaxirada MAHSULOTI BOR kategoriyalar ro'yxati (har birida nechta zaxiradagi mahsulot bor). "
+                "Mijozga kategoriya/tur taklif qilishdan OLDIN shu tool'ni chaqiring — bo'sh yoki zaxirasi "
+                "tugagan kategoriyani taklif qilmang. Faqat shu ro'yxatdagilarni ayting."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_boxes",
             "description": (
                 "Rangli qutilar (box) ro'yxati — mijoz qadoq/quti/sovg'a qutisi so'raganda yoki taklif "
@@ -286,6 +298,17 @@ TOOL_SPECS: list[dict] = [
                     "phone": {"type": "string", "description": "Telefon raqami (ixtiyoriy)"},
                 },
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_order",
+            "description": (
+                "Buyurtmani YAKUNLANGAN (completed) qiladi — mijoz buyumni OLGANINI tasdiqlaganda "
+                "('oldim', 'yetib keldi', 'qo'limda') chaqiring. Faqat buyurtma yo'lda/yetkazilgan bo'lsa ishlaydi."
+            ),
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
@@ -672,6 +695,12 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             ]
         return brief
 
+    if name == "list_categories":
+        rows = await CatalogRepository(db).categories_with_stock()
+        return {"categories": [
+            {"category_id": str(c.id), "name": c.name_uz, "in_stock_count": n} for c, n in rows
+        ]}
+
     if name == "list_boxes":
         # product_id IXTIYORIY: berilsa -> shu mahsulot kategoriyasi qutilari;
         # berilmasa/xato bo'lsa -> barcha faol qutilar (mijoz umumiy so'raganda xato bermaydi).
@@ -919,6 +948,20 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         payment = await PaymentService(db).submit_payment(order.id, receipt_url, payer)
         return {"payment_id": str(payment.id), "status": payment.status,
                 "note": "Chek to'lovga tasdiqlashga yuborildi. Operator tekshiradi."}
+
+    if name == "complete_order":
+        from app.modules.orders.models import OrderStatus
+        from app.modules.orders.repository import OrdersRepository
+        from app.modules.orders.service import OrdersService
+
+        order = await OrdersRepository(db).get_current_order(ctx.conversation.customer_id)
+        if order is None:
+            return {"error": "Faol buyurtma topilmadi."}
+        if order.status not in ("shipping", "delivered"):
+            return {"error": f"Buyurtma hali yakunlanmaydi (holat: {order.status}). Yo'lda/yetkazilgan bo'lishi kerak."}
+        await OrdersService(db).set_status(order.id, OrderStatus.completed)
+        return {"order_no": order.order_no, "status": "completed",
+                "note": "Buyurtma yakunlandi — mijozga minnatdorchilik bildir."}
 
     if name == "handoff_to_operator":
         # AI to'xtaydi (ai_enabled=False) — operator qo'lga oladi. Aks holda AI javob beraverib,

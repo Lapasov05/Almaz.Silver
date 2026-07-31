@@ -53,10 +53,9 @@ async def _send_payment_followup(db: AsyncSession, order) -> None:
             return
         from app.modules.ai.prompt_registry import get_ai_text
 
-        fee = f"{int(order.delivery_fee or 0):,}".replace(",", " ")
-        total = f"{int(order.grand_total or 0):,}".replace(",", " ")
+        total = f"{int(order.grand_total or 0):,}".replace(",", " ")  # yetkazish yo'q -> mahsulotlar summasi
         card = await PaymentRepository(db).get_default_card()
-        lines = [await get_ai_text(db, "ai_msg_location_confirmed_head", fee=fee, total=total)]
+        lines = [await get_ai_text(db, "ai_msg_location_confirmed_head", total=total)]
         if card is not None:
             lines.append(await get_ai_text(
                 db, "ai_msg_location_confirmed_card", card=card.card_number_masked, holder=card.holder_name))
