@@ -338,3 +338,37 @@ GET/POST'dan tashqari endi EDIT va DELETE ham bor. Auth: `Bearer`. Ruxsat: `conv
 - Topilmasa → `404`.
 
 Misol: operator suhbatда "mijoz" o'rniga ism yozib qo'yishi — `PATCH /inbox/customers/{id} {"full_name":"Asad"}`.
+
+---
+
+# Instagram kontent (media) — kengaytirilgan CRUD + rejalashtirish (2026-07-31)
+
+Frontend so'rovi bo'yicha 3 ta yaxshilanish. Auth: `Bearer`. Ruxsat: o'qish `products:view`, yozish `products:update`.
+
+## 1) GET by id (405 tuzatildi)
+`GET /catalog/instagram-media/{media_id}` → bitta `InstagramMediaOut`. Yo'q bo'lsa `404`.
+
+## 2) Global ro'yxat + filtr (klientda N+1 tugadi)
+`GET /catalog/instagram-media?product_id={uuid}&status={draft|scheduled|published}` → `InstagramMediaOut[]`.
+Har ikki filtr ixtiyoriy: `product_id`siz — barcha kontent; `status`siz — barcha holat. (Mahsulot ichidagi
+ro'yxat ham qoladi: `GET /catalog/products/{id}/instagram`.)
+
+## 3) Kengaytirilgan model (`InstagramMediaOut`)
+```json
+{
+  "id": "uuid", "product_id": "uuid",
+  "media_type": "post|reel|story", "shortcode": "…", "story_ref": null,
+  "permalink": "…", "image_url": "…",
+  "caption": "kontent matni",
+  "status": "draft|scheduled|published",
+  "scheduled_at": "2026-08-01T10:00:00Z | null",
+  "like_count": 120, "view_count": 3400, "comment_count": 15,
+  "is_active": true, "is_expired": false, "expires_at": null, "created_at": "…"
+}
+```
+- **Yaratish** `POST /catalog/products/{id}/instagram`: `link` endi IXTIYORIY (draft/rejalashtirilgan kontent
+  hali link'siz bo'lishi mumkin). Yana: `caption?`, `status?` (bo'sh → `published`), `scheduled_at?`.
+  Link berilsa — shortcode/story_ref avtomatik ajratiladi.
+- **Tahrirlash** `PATCH /catalog/instagram-media/{id}`: `is_active?, image_url?, caption?, status?,
+  scheduled_at?, like_count?, view_count?, comment_count?`. Noma'lum maydon → `422`.
+- Status: `draft` (qoralama) · `scheduled` (rejalashtirilgan, `scheduled_at` bilan) · `published` (e'lon qilingan).

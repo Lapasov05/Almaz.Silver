@@ -325,6 +325,14 @@ class ProductMedia(UUIDMixin, TimestampMixin, Base):
     # expires_at: story 24 soat turadi (post/reel/image = NULL, doimiy)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true", nullable=False)
+    # --- Kontent boshqaruvi: matn + holat (rejalashtirish) + samaradorlik (engagement) ---
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)  # kontent matni
+    # status: draft (qoralama) | scheduled (rejalashtirilgan) | published (e'lon qilingan)
+    status: Mapped[str] = mapped_column(String(20), server_default="published", nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    like_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    view_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
+    comment_count: Mapped[int] = mapped_column(Integer, server_default="0", nullable=False)
 
     product: Mapped["Product"] = relationship(back_populates="media")
 

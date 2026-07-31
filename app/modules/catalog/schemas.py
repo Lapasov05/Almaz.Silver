@@ -2,6 +2,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -228,14 +229,29 @@ class MediaOut(BaseModel):
 
 
 # ---------- Instagram media (post/story link -> mahsulot) ----------
+MediaContentStatus = Literal["draft", "scheduled", "published"]
+
+
 class InstagramMediaCreate(BaseModel):
-    link: str = Field(min_length=1, max_length=500)              # IG post yoki story link
+    # link IXTIYORIY: draft/rejalashtirilgan kontentda hali bo'lmasligi mumkin. Berilsa -> shortcode/story_ref ajratiladi.
+    link: str | None = Field(default=None, max_length=500)
     image_url: str | None = Field(default=None, max_length=500)  # ixtiyoriy thumbnail (/files upload)
+    caption: str | None = None                                   # kontent matni
+    status: MediaContentStatus | None = None                    # bo'sh -> published
+    scheduled_at: datetime | None = None                        # rejalashtirilgan vaqt
 
 
 class InstagramMediaUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     is_active: bool | None = None
     image_url: str | None = Field(default=None, max_length=500)
+    caption: str | None = None
+    status: MediaContentStatus | None = None
+    scheduled_at: datetime | None = None
+    like_count: int | None = Field(default=None, ge=0)
+    view_count: int | None = Field(default=None, ge=0)
+    comment_count: int | None = Field(default=None, ge=0)
 
 
 class InstagramMediaOut(BaseModel):
@@ -248,6 +264,12 @@ class InstagramMediaOut(BaseModel):
     story_ref: str | None
     permalink: str | None
     image_url: str | None
+    caption: str | None
+    status: str                # draft | scheduled | published
+    scheduled_at: datetime | None
+    like_count: int
+    view_count: int
+    comment_count: int
     is_active: bool
     is_expired: bool           # story muddati o'tganmi
     expires_at: datetime | None

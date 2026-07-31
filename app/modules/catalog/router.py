@@ -221,6 +221,23 @@ async def list_instagram_media(product_id: uuid.UUID, service: CatalogService = 
     return [InstagramMediaOut.model_validate(m) for m in items]
 
 
+@router.get("/instagram-media", response_model=list[InstagramMediaOut], dependencies=[_VIEW])
+async def list_all_instagram_media(
+    product_id: uuid.UUID | None = None,
+    status: str | None = None,
+    service: CatalogService = Depends(svc),
+):
+    """Global IG kontent ro'yxati — `?product_id` va/yoki `?status` (draft/scheduled/published) filtri bilan."""
+    items = await service.list_all_instagram_media(product_id=product_id, status=status)
+    return [InstagramMediaOut.model_validate(m) for m in items]
+
+
+@router.get("/instagram-media/{media_id}", response_model=InstagramMediaOut, dependencies=[_VIEW])
+async def get_instagram_media(media_id: uuid.UUID, service: CatalogService = Depends(svc)):
+    """Bitta IG kontent elementi (405 tuzatildi — endi GET bor)."""
+    return InstagramMediaOut.model_validate(await service.get_instagram_media(media_id))
+
+
 @router.patch("/instagram-media/{media_id}", response_model=InstagramMediaOut, dependencies=[_UPDATE])
 async def update_instagram_media(
     media_id: uuid.UUID, payload: InstagramMediaUpdate, service: CatalogService = Depends(svc)

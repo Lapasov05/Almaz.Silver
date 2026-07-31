@@ -341,6 +341,18 @@ class CatalogRepository:
         )
         return list(res.scalars().all())
 
+    async def list_all_ig_media(
+        self, *, product_id: uuid.UUID | None = None, status: str | None = None
+    ) -> list[ProductMedia]:
+        """Global IG kontent ro'yxati — mahsulot/holat bo'yicha filtr (server-side, N+1'siz)."""
+        stmt = select(ProductMedia).where(ProductMedia.media_type.in_(("post", "reel", "story")))
+        if product_id is not None:
+            stmt = stmt.where(ProductMedia.product_id == product_id)
+        if status is not None:
+            stmt = stmt.where(ProductMedia.status == status)
+        res = await self.db.execute(stmt.order_by(ProductMedia.created_at.desc()))
+        return list(res.scalars().all())
+
     # ---------- Search ----------
     async def search_text(self, query: str, limit: int) -> list[tuple[Product, float]]:
         tsquery = func.websearch_to_tsquery("simple", query)

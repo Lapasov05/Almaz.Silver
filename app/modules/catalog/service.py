@@ -418,26 +418,45 @@ class CatalogService:
     # ==================== Instagram media (post/story link -> mahsulot) ====================
     async def add_instagram_media(self, product_id: uuid.UUID, data: InstagramMediaCreate) -> ProductMedia:
         product = await self.get_product(product_id)  # 404 agar yo'q
-        ref = extract_instagram_ref(data.link)
-        if ref is None:
-            raise AppError("Instagram post yoki story linki noto'g'ri (masalan .../p/... yoki .../stories/...)")
-        media_type, value = ref
         pm = ProductMedia(
             product_id=product.id,
             channel=MediaChannel.instagram,
-            media_type=media_type,
-            permalink=data.link,
             image_url=data.image_url,
+            caption=data.caption,
+            status=(data.status or "published"),
+            scheduled_at=data.scheduled_at,
         )
-        if media_type == "story":
-            pm.story_ref = value
-            pm.expires_at = _utcnow() + timedelta(hours=24)  # story 24 soat turadi
-        else:  # post / reel
-            pm.shortcode = value
+        # link IXTIYORIY: berilsa shortcode/story_ref ajratamiz; berilmasa (draft/rejalashtirilgan) — bo'sh
+        if data.link:
+            ref = extract_instagram_ref(data.link)
+            if ref is None:
+                raise AppError("Instagram post yoki story linki noto'g'ri (masalan .../p/... yoki .../stories/...)")
+            media_type, value = ref
+            pm.media_type = media_type
+            pm.permalink = data.link
+            if media_type == "story":
+                pm.story_ref = value
+                pm.expires_at = _utcnow() + timedelta(hours=24)  # story 24 soat turadi
+            else:  # post / reel
+                pm.shortcode = value
+        else:
+            pm.media_type = "post"  # linksiz qoralama uchun default
         self.repo.db.add(pm)
         await self.repo.db.commit()
         await self.repo.db.refresh(pm)
         return pm
+
+    async def get_instagram_media(self, media_id: uuid.UUID) -> ProductMedia:
+        media = await self.repo.get_media(media_id)
+        if media is None:
+            raise NotFoundError("Instagram media topilmadi")
+        return media
+
+    async def list_all_instagram_media(
+        self, *, product_id: uuid.UUID | None = None, status: str | None = None
+    ) -> list[ProductMedia]:
+        """Global IG kontent ro'yxati — mahsulot va/yoki holat bo'yicha filtr (klientda N+1'siz)."""
+        return await self.repo.list_all_ig_media(product_id=product_id, status=status)
 
     async def list_instagram_media(self, product_id: uuid.UUID) -> list[ProductMedia]:
         await self.get_product(product_id)
