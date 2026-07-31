@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -54,6 +54,8 @@ class Order(UUIDMixin, TimestampMixin, Base):
     grand_total: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default="0", nullable=False)
     # TZ 1 KPI 3: AI o'zi yaratgan buyurtmalar sonini hisoblash uchun
     created_by_ai: Mapped[bool] = mapped_column(Boolean, server_default="false", nullable=False)
+    # Operator/admin izohi (PATCH /orders/{id} bilan tahrirlanadi)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"

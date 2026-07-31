@@ -32,6 +32,17 @@ class OrderStatusUpdate(BaseModel):
     status: OrderStatus
 
 
+class OrderUpdate(BaseModel):
+    """Buyurtmani tahrirlash (PATCH). Faqat berilgan maydonlar yangilanadi (partial).
+
+    Statusni bu yerda EMAS — POST /orders/{id}/status; bekor — POST /orders/{id}/cancel.
+    Item (mahsulot/soni/narx) tahrirlash v1'da yo'q (zaxira ta'siri) — bekor qilib qayta yarating.
+    """
+    customer_id: uuid.UUID | None = None
+    assigned_operator_id: uuid.UUID | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 class OrderItemOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -68,6 +79,7 @@ class OrderOut(BaseModel):
     items_total: Decimal
     delivery_fee: Decimal
     grand_total: Decimal
+    notes: str | None
     created_at: datetime
     items: list[OrderItemOut]
     history: list[OrderStatusHistoryOut]

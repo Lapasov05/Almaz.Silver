@@ -247,6 +247,31 @@ class OrdersService:
             await self.db.commit()
         return order
 
+    async def update_order(self, order_id: uuid.UUID, data) -> Order:
+        """Buyurtmani tahrirlaydi (partial): customer_id, assigned_operator_id, notes.
+
+        Status/bekor/item bu yerda emas (/status, /cancel; item — zaxira ta'siri). Berilmagan
+        maydonlar o'zgarmaydi (exclude_unset). customer/operator berilsa — mavjudligi tekshiriladi.
+        """
+        from app.modules.identity.models import User
+        from app.modules.inbox.models import Customer
+
+        order = await self.get(order_id)
+        fields = data.model_dump(exclude_unset=True)
+        if "customer_id" in fields and fields["customer_id"] is not None:
+            if await self.db.get(Customer, fields["customer_id"]) is None:
+                raise NotFoundError("Mijoz topilmadi")
+            order.customer_id = fields["customer_id"]
+        if "assigned_operator_id" in fields:
+            op_id = fields["assigned_operator_id"]
+            if op_id is not None and await self.db.get(User, op_id) is None:
+                raise NotFoundError("Operator (foydalanuvchi) topilmadi")
+            order.assigned_operator_id = op_id
+        if "notes" in fields:
+            order.notes = fields["notes"]
+        await self.db.commit()
+        return await self.get(order_id)
+
     async def cancel_order(self, order_id: uuid.UUID, *, changed_by: uuid.UUID | None = None) -> Order:
         order = await self.get(order_id)
         if OrderStatus(order.status) not in _CANCELLABLE:

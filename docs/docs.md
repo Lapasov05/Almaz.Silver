@@ -132,14 +132,24 @@ Ikki variant bor edi — **A variant tanlandi va amalga oshirildi**:
 
 ---
 
-## 6. Bog'liq (ixtiyoriy, alohida) — PATCH /orders/{order_id}
+## 6. Buyurtmani tahrirlash — `PATCH /orders/{order_id}`  (✅ BAJARILDI 2026-07-31)
 
-Hozir 405 Allow: GET. Buyurtmani tahrirlash (mijoz, qatorlar, o'lcham, narx, izoh) shu endpointни kutadi
-va frontendда VITE_FEATURE_ORDER_EDITING flagi ortида tayyor turibdi. Drag-&-drop uchun shart emas —
-faqat kelajak uchun eslatma.
+Endi 405 EMAS. Ruxsat: `orders:update`. Body (partial — faqat berilgan maydon yangilanadi):
+```json
+{
+  "customer_id": "uuid",              // mijozni almashtirish (mavjud bo'lishi shart, aks holda 404)
+  "assigned_operator_id": "uuid|null",// operator tayinlash / null bilan yechish
+  "notes": "operator izohi"           // erkin izoh (<=2000 belgi); null bilan tozalash
+}
+```
+Javob `200` — to'liq yangilangan `OrderOut` (endi `notes: string|null` ham qaytadi).
 
-Kutilayotgan shakl: PATCH /orders/{id} { status?, notes?, customer_id?, items?, ring_size?, … } →
-OrderOut.
+- **Status** bu yerda EMAS → `POST /orders/{id}/status`. **Bekor** → `POST /orders/{id}/cancel`.
+- **Item (mahsulot/soni/o'lcham/narx) tahrirlash v1'da YO'Q** (zaxira/summa ta'siri) — kerak bo'lsa
+  buyurtmani bekor qilib qayta yarating; keyingi versiyada qo'shsa bo'ladi.
+- Xatolar: mijoz/operator topilmasa `404`; ruxsat yo'q `403`; noto'g'ri body `422`.
+
+Frontend: `VITE_FEATURE_ORDER_EDITING` flagini yoqing — customer/operator/notes tahrirlash ishlaydi.
 
 ---
 

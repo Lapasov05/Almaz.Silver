@@ -10,7 +10,7 @@ from app.core.deps import require_permission
 from app.core.pagination import Page, PageParams, page_params
 from app.modules.identity.models import User
 from app.modules.orders.models import OrderStatus
-from app.modules.orders.schemas import OrderCancel, OrderCreate, OrderOut, OrderStatusUpdate
+from app.modules.orders.schemas import OrderCancel, OrderCreate, OrderOut, OrderStatusUpdate, OrderUpdate
 from app.modules.orders.service import OrdersService
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -63,6 +63,20 @@ async def get_order(
     order_id: uuid.UUID, service: OrdersService = Depends(get_orders_service)
 ) -> OrderOut:
     return OrderOut.model_validate(await service.get(order_id))
+
+
+@router.patch("/{order_id}", response_model=OrderOut)
+async def update_order(
+    order_id: uuid.UUID,
+    payload: OrderUpdate,
+    service: OrdersService = Depends(get_orders_service),
+    user: User = Depends(require_permission("orders:update")),
+) -> OrderOut:
+    """Buyurtmani tahrirlaydi (partial): customer_id, assigned_operator_id, notes.
+
+    Status → /status; bekor → /cancel; item (mahsulot/soni/narx) — hozircha yo'q (bekor+qayta yarating).
+    """
+    return OrderOut.model_validate(await service.update_order(order_id, payload))
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
