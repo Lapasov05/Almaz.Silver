@@ -52,16 +52,25 @@ async def _send_payment_followup(db: AsyncSession, order) -> None:
         if conv is None:
             return
         from app.modules.ai.prompt_registry import get_ai_text
+        from app.modules.delivery.repository import DeliveryRepository
 
         total = f"{int(order.grand_total or 0):,}".replace(",", " ")  # yetkazish yo'q -> mahsulotlar summasi
         card = await PaymentRepository(db).get_default_card()
-        lines = [await get_ai_text(db, "ai_msg_location_confirmed_head", total=total)]
+        # Zonaga qarab yetkazish MA'LUMOTI (Yandex / BTS) — pul buyurtmaga qo'shilmaydi
+        delivery = await DeliveryRepository(db).get_by_order(order.id)
+        loc_type = delivery.location_type if delivery is not None else None
+        delivery_key = "ai_msg_delivery_bts" if loc_type == "BTS" else "ai_msg_delivery_tashkent"
+        lines = [
+            await get_ai_text(db, "ai_msg_location_confirmed_head"),
+            await get_ai_text(db, delivery_key),
+        ]
         if card is not None:
             lines.append(await get_ai_text(
-                db, "ai_msg_location_confirmed_card", card=card.card_number_masked, holder=card.holder_name))
+                db, "ai_msg_location_confirmed_card", total=total,
+                card=card.card_number_masked, holder=card.holder_name))
         else:
-            lines.append(await get_ai_text(db, "ai_msg_location_confirmed_nocard"))
-        await inbox.ai_send(conv, "\n".join(lines))
+            lines.append(await get_ai_text(db, "ai_msg_location_confirmed_nocard", total=total))
+        await inbox.ai_send(conv, "\n\n".join(lines))
         conv.ai_state = AiState.awaiting_payment.value
         await db.commit()
     except Exception:  # noqa: BLE001 — follow-up confirm oqimini buzmasin

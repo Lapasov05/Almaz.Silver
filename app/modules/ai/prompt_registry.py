@@ -163,25 +163,50 @@ AI_PROMPTS: list[dict] = [
     },
     {
         "key": "ai_msg_location_confirmed_head",
-        "purpose": "Mijoz manzilni web xarita orqali tasdiqlagach AVTOMATIK yuboriladigan xabarning boshi. "
-                   "Yetkazish puli OLINMAYDI — faqat mahsulotlar summasi. Mijoz 'yubordim' deyishini kutmaydi.",
+        "purpose": "Manzil web xarita orqali tasdiqlangach AVTOMATIK yuboriladigan xabarning boshi.",
         "used_in": "app/modules/delivery/checkout.py::_send_payment_followup",
-        "placeholders": "{total}",
-        "value": "Manzilingiz qabul qilindi ✅\nJami to'lov (mahsulotlar): {total} so'm.",
+        "placeholders": "",
+        "value": "Manzilingiz qabul qilindi ✅",
+    },
+    {
+        "key": "ai_msg_delivery_tashkent",
+        "purpose": "Toshkent (Yandex) zonasi uchun yetkazish MA'LUMOTI. Dostavka pulini mijoz KURYERGA "
+                   "o'zi to'laydi (buyurtma summasiga qo'shilmaydi).",
+        "used_in": "app/modules/delivery/checkout.py::_send_payment_followup (Toshkent) + prompt (7-qadam)",
+        "placeholders": "",
+        "value": ("🚕 Yandex Go orqali shahar bo'ylab yetkazib beramiz\n"
+                  "⏱ 1 soat ichida yetib boradi\n"
+                  "💰 Dostavka narxi masofaga qarab — uni kuryerga o'zingiz to'laysiz\n"
+                  "📦 Zakazlar har kuni, istalgan vaqtda qabul qilinadi\n"
+                  "⚡ To'lov qilingan zahoti Yandex orqali yuboramiz ✅"),
+    },
+    {
+        "key": "ai_msg_delivery_bts",
+        "purpose": "Viloyat (BTS pochta) zonasi uchun yetkazish MA'LUMOTI. Dostavka narxini mijoz BTS "
+                   "bazasida to'laydi (buyurtma summasiga qo'shilmaydi).",
+        "used_in": "app/modules/delivery/checkout.py::_send_payment_followup (viloyat) + prompt (7-qadam)",
+        "placeholders": "",
+        "value": ("📮 BTS pochta orqali chiqarib beramiz — 1-2 kun ichida yetib boradi\n"
+                  "💰 Dostavka narxi 30 000 so'm atrofida — uni BTS pochta bazasida to'laysiz\n"
+                  "🚚 BTS har kuni reys: pochtalarni 18:00 gacha qabul qiladi\n"
+                  "⏰ Bizga 17:00 gacha to'lov qilsangiz, zakazingiz bugungi reys bilan chiqib ketadi ✅"),
     },
     {
         "key": "ai_msg_location_confirmed_card",
-        "purpose": "Manzil tasdiqlangach — to'lov kartasi + chek so'rovi (karta mavjud bo'lsa).",
+        "purpose": "Manzil tasdiqlangach — bizga to'lov (mahsulotlar summasi) + karta + chek so'rovi.",
         "used_in": "app/modules/delivery/checkout.py::_send_payment_followup",
-        "placeholders": "{card} {holder}",
-        "value": "To'lov uchun karta: {card} ({holder}).\nTo'lovni amalga oshirgach, chek RASMINI shu yerga yuboring.",
+        "placeholders": "{total} {card} {holder}",
+        "value": ("💳 Bizga esa to'lovni oldindan karta orqali qilasiz 😊\n"
+                  "To'lov (mahsulotlar): {total} so'm\n"
+                  "Karta: {card} ({holder})\n"
+                  "To'lagach chek RASMINI shu yerga yuboring 📸"),
     },
     {
         "key": "ai_msg_location_confirmed_nocard",
         "purpose": "Manzil tasdiqlangach — karta sozlanmagan bo'lsa yuboriladigan xabar.",
         "used_in": "app/modules/delivery/checkout.py::_send_payment_followup",
-        "placeholders": "",
-        "value": "To'lov kartasi ma'lumoti tez orada yuboriladi.",
+        "placeholders": "{total}",
+        "value": "💳 Bizga to'lov (mahsulotlar): {total} so'm — karta ma'lumoti tez orada yuboriladi.",
     },
 ]
 
