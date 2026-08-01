@@ -964,10 +964,13 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 "note": "Buyurtma yakunlandi — mijozga minnatdorchilik bildir."}
 
     if name == "handoff_to_operator":
-        # AI to'xtaydi (ai_enabled=False) — operator qo'lga oladi. Aks holda AI javob beraverib,
-        # suhbat operatorga o'tmaydi. Operator inbox'da ai_state=handed_off bo'yicha ko'radi.
+        # AI VAQTINCHALIK to'xtaydi (pauza) — operator qo'lga oladi. DOIMIY O'CHIRILMAYDI: pauza
+        # tugagach (yoki operator ishlagach) AI qayta ishlaydi. Operator inbox'da handed_off bo'yicha ko'radi.
+        from datetime import datetime, timedelta, timezone
+
+        minutes = int(await _get_setting(db, "handoff_pause_minutes", 60) or 60)
         ctx.conversation.ai_state = AiState.handed_off.value
-        ctx.conversation.ai_enabled = False
+        ctx.conversation.ai_paused_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
         return {"status": "handed_off", "reason": args.get("reason")}
 
     return {"error": f"noma'lum tool: {name}"}

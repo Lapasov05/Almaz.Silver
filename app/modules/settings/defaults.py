@@ -19,6 +19,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "auto_reply": True,
     "operator_timeout": 300,           # operator javob kutish (soniya)
     "ai_pause_minutes": 15,            # TZ 9: operator yozgach AI pauzasi (daqiqa)
+    "handoff_pause_minutes": 60,       # AI operatorga o'tkazgach VAQTINCHALIK pauza (doimiy o'chirmaydi)
 
     # --- AI / LLM (TZ 7.2) ---
     "ai_temperature": 0.7,

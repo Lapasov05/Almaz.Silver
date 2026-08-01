@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.core.config import get_settings
@@ -305,11 +305,12 @@ class Agent:
                 text = result.content or ""
                 break
             else:
-                # Sikl tugadi — operatorga o'tkazamiz (AI to'xtaydi, operator qo'lga oladi)
+                # Sikl tugadi — operatorga o'tkazamiz (AI VAQTINCHALIK pauza, doimiy o'chirilmaydi)
                 text = await get_ai_text(self.db, "ai_msg_fallback")
                 used_tools.append("handoff_to_operator")
                 conv.ai_state = AiState.handed_off.value
-                conv.ai_enabled = False
+                minutes = int(await _setting(self.db, "handoff_pause_minutes", 60) or 60)
+                conv.ai_paused_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
         except Exception as exc:  # noqa: BLE001
             # LLM/OpenAI xatosi 500 bermasin — jim skip + logда to'liq traceback + reason'да sabab
             logger.exception("AI javob berolmadi — LLM xatosi (conv=%s)", conv.id)
