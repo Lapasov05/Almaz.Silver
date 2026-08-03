@@ -298,6 +298,31 @@ class Agent:
         await inbox_svc.send_typing(conv)
         reply_started = time.monotonic()
 
+        # --- TEST rejimi: AI suhbatga BIRINCHI marta qo'shilganda (join) — yumshoq boshlash ---
+        # ai_test_mode=true va bu suhbatda AI hali yozmagan bo'lsa: mijozni ogohlantiramiz.
+        # Agar mijozда DAVOM ETAYOTGAN buyurtma bo'lsa — AI uni hijack QILMAYDI: admin bog'lanishini
+        # aytib, yumshoq operatorga o'tkazamiz (LLM'ni ishga tushirmasdan — buyurtmaga tegmaslik uchun).
+        test_join = bool(await _setting(self.db, "ai_test_mode", False)) and await _first_ai_message(
+            self.db, conv.id
+        )
+        if test_join:
+            from app.modules.orders.repository import OrdersRepository
+
+            existing_order = await OrdersRepository(self.db).get_current_order(conv.customer_id)
+            if existing_order is not None:
+                notice = await get_ai_text(
+                    self.db, "ai_msg_test_mode_notice_has_order", order_no=existing_order.order_no
+                )
+                message = await inbox_svc.ai_send(conv, notice)
+                conv.ai_state = AiState.handed_off.value
+                minutes = int(await _setting(self.db, "handoff_pause_minutes", 60) or 60)
+                conv.ai_paused_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+                await self.db.commit()
+                return AgentOutcome(
+                    status="replied", reply=notice, message_id=message.id,
+                    used_tools=["handoff_to_operator"], state=conv.ai_state,
+                )
+
         # --- Prompt + memory (TZ 7.2/7.3) ---
         prompt_version = int(await _setting(self.db, "prompt_version", 1) or 1)
         base_prompt = await get_ai_text(self.db, "ai_system_prompt")  # DB (registr) — asosiy prompt
@@ -390,9 +415,10 @@ class Agent:
         if not force and await _is_superseded(self.db, conv.id, trigger_message_id):
             return AgentOutcome(status="skipped", reason="superseded", state=conv.ai_state)
 
-        # --- TEST rejimi: har suhbat boshida mijozga BIR MARTA test ekanini bildiramiz ---
+        # --- TEST rejimi: AI join qildi, buyurtma YO'Q — javob oldiga yumshoq ogohlantirish ---
+        # (buyurtmasi BOR holat yuqorida allaqachon operatorga o'tkazilib qaytdi).
         final_text = guard.text
-        if bool(await _setting(self.db, "ai_test_mode", False)) and await _first_ai_message(self.db, conv.id):
+        if test_join:
             notice = await get_ai_text(self.db, "ai_msg_test_mode_notice")
             if notice:
                 final_text = f"{notice}\n\n{final_text}"
