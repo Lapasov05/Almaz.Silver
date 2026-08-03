@@ -215,9 +215,15 @@ async def _business_context(db, conv) -> str | None:
         line += (". Kela olmasa — yetkazib beramiz. HECH QACHON 'faqat onlayn buyurtma qabul qilamiz' "
                  "yoki 'do'konga kelib bo'lmaydi' DEMA — bu NOTO'G'RI.")
         parts.append(line)
-    op = (await _setting(db, "operator_phone", "") or "").strip()
+    # Operator raqami: avval operator_phone, bo'sh bo'lsa complaint_phone (fallback — raqam DOIM bo'lsin).
+    op = (await _setting(db, "operator_phone", "") or "").strip() or (
+        await _setting(db, "complaint_phone", "") or ""
+    ).strip()
     if op:
-        parts.append(f"Mijoz telefon raqam / operator / jonli aloqa so'rasa shu raqamni ber: {op}")
+        parts.append(
+            f"Mijoz telefon raqam / operator / jonli aloqa so'rasa ('nomer bering', 'kimga bog'lanaman') — "
+            f"handoff'dan OLDIN DARHOL shu raqamni ber: {op}. Raqamni bermay 'operatorga uladim' DEMA."
+        )
     if not parts:
         return None
     return "[Do'kon faktlari — shularga amal qil: " + " ".join(parts) + "]"
