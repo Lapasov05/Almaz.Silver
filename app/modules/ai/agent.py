@@ -195,6 +195,48 @@ async def _instagram_context(db, conv) -> str | None:
     )
 
 
+async def _business_context(db, conv) -> str | None:
+    """Do'kon FAKTLARI (har javobga) — offline do'kon, kelib olish, operator raqami.
+
+    AI'ning "faqat onlayn ishlaymiz" kabi NOTO'G'RI gaplarini oldini oladi (do'kon jismoniy).
+    Qiymatlar settingsdan — operator o'zgartira oladi.
+    """
+    parts: list[str] = []
+    if bool(await _setting(db, "store_offline", True)):
+        addr = (await _setting(db, "store_address", "") or "").strip()
+        hours = (await _setting(db, "store_work_hours", "") or "").strip()
+        line = ("Do'kon JISMONIY (offline) — mijoz do'konga kelib mahsulotni O'ZI ham olishi mumkin"
+                if bool(await _setting(db, "store_pickup_enabled", True))
+                else "Do'kon jismoniy (offline)")
+        if addr:
+            line += f". Do'kon manzili: {addr}"
+        if hours:
+            line += f" (ish vaqti: {hours})"
+        line += (". Kela olmasa — yetkazib beramiz. HECH QACHON 'faqat onlayn buyurtma qabul qilamiz' "
+                 "yoki 'do'konga kelib bo'lmaydi' DEMA — bu NOTO'G'RI.")
+        parts.append(line)
+    op = (await _setting(db, "operator_phone", "") or "").strip()
+    if op:
+        parts.append(f"Mijoz telefon raqam / operator / jonli aloqa so'rasa shu raqamni ber: {op}")
+    if not parts:
+        return None
+    return "[Do'kon faktlari — shularga amal qil: " + " ".join(parts) + "]"
+
+
+async def _first_ai_message(db, conv_id) -> bool:
+    """Bu suhbatда hali AI xabar YUBORMAGAN bo'lsa True (test-rejim bildirishnomasi bir marta uchun)."""
+    from sqlalchemy import func, select
+
+    from app.modules.inbox.models import Message
+
+    res = await db.execute(
+        select(func.count()).select_from(Message).where(
+            Message.conversation_id == conv_id, Message.sender_type == "ai"
+        )
+    )
+    return int(res.scalar_one()) == 0
+
+
 class Agent:
     def __init__(self, db, provider: LLMProvider | None):
         self.db = db
@@ -271,6 +313,10 @@ class Agent:
             order_ctx = await _active_order_context(self.db, conv)
             if order_ctx:
                 messages.insert(1, LlmMessage(role="system", content=order_ctx))
+            # Do'kon faktlari (offline do'kon, kelib olish, operator raqami) — har javobга grounding
+            biz_ctx = await _business_context(self.db, conv)
+            if biz_ctx:
+                messages.insert(1, LlmMessage(role="system", content=biz_ctx))
             model = str(
                 await _setting(self.db, "llm_model", settings.ai_default_model) or settings.ai_default_model
             )
@@ -338,8 +384,15 @@ class Agent:
         if not force and await _is_superseded(self.db, conv.id, trigger_message_id):
             return AgentOutcome(status="skipped", reason="superseded", state=conv.ai_state)
 
+        # --- TEST rejimi: har suhbat boshida mijozga BIR MARTA test ekanini bildiramiz ---
+        final_text = guard.text
+        if bool(await _setting(self.db, "ai_test_mode", False)) and await _first_ai_message(self.db, conv.id):
+            notice = await get_ai_text(self.db, "ai_msg_test_mode_notice")
+            if notice:
+                final_text = f"{notice}\n\n{final_text}"
+
         # --- Javobni yuborish (AI, pauza qo'ymaydi) ---
-        message = await inbox_svc.ai_send(conv, guard.text)
+        message = await inbox_svc.ai_send(conv, final_text)
 
         # --- State machine (TZ 7.1) ---
         next_state = infer_next_state(AiState(conv.ai_state), used_tools)
@@ -348,7 +401,7 @@ class Agent:
 
         return AgentOutcome(
             status="replied",
-            reply=guard.text,
+            reply=final_text,
             message_id=message.id,
             used_tools=used_tools,
             violations=guard.violations,

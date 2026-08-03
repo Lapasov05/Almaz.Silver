@@ -47,9 +47,12 @@ AI_PROMPTS: list[dict] = [
         "purpose": "Faol buyurtma 'pending' (manzil hali tasdiqlanmagan) — AI'ga keyingi qadam ko'rsatmasi.",
         "used_in": "app/modules/ai/agent.py::_active_order_context (guide)",
         "placeholders": "",
-        "value": "Manzil hali TASDIQLANMAGAN. request_location bilan xarita havolasini bering. Mijoz "
-                 "'yubordim' desa-yu holat hali pending bo'lsa — xaritada joyni belgilab TASDIQLASH "
-                 "tugmasini bosishini muloyim ayting yoki havolani qayta yuboring.",
+        "value": "Manzil hali TASDIQLANMAGAN. Tartib: (1) AVVAL request_location bilan xarita havolasini ber; "
+                 "(2) so'ng 'lokatsiyani topishда muammo bo'lmayaptimi?' deб so'ra. (3) Mijoz muammo borligini "
+                 "aytsa YOKI 'yubordim/belgiladim' desa-yu holat hali pending bo'lsa (link ishlamagan) — "
+                 "manzilini MATN bilan yozishini so'ra va set_delivery_address bilan qabul qil. (4) Mijoz o'zi "
+                 "manzilni MATN bilan yozsa — link kutmay set_delivery_address chaqir. Bir manzilni takror "
+                 "so'ramа, matn bilan qabul qil.",
     },
     {
         "key": "ai_ctx_order_guide_waiting_payment",
@@ -162,6 +165,15 @@ AI_PROMPTS: list[dict] = [
         "used_in": "app/modules/ai/agent.py::respond (sikl tugagani)",
         "placeholders": "",
         "value": "Kechirasiz, so'rovingizni to'liq bajara olmadim. Operator tez orada bog'lanadi.",
+    },
+    {
+        "key": "ai_msg_test_mode_notice",
+        "purpose": "AI TEST rejimida (settings.ai_test_mode=true) — har suhbat boshida mijozga BIR MARTA "
+                   "yuboriladigan ogohlantirish (AI test sifatida ishlamoqda; buyurtmani operator yakunlaydi).",
+        "used_in": "app/modules/ai/agent.py::respond (ai_test_mode)",
+        "placeholders": "",
+        "value": ("ℹ️ Eslatma: hozir sizga avtomatik yordamchi (AI) test rejimida javob bermoqda. "
+                  "Buyurtmangizni operatorimiz shaxsan tekshirib, siz bilan bog'lanadi. 😊"),
     },
     {
         "key": "ai_msg_location_confirmed_head",

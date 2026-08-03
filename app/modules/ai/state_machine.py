@@ -10,7 +10,7 @@ VALID_TRANSITIONS: dict[AiState, set[AiState]] = {
     AiState.greeting: {AiState.browsing, AiState.recommending, AiState.handed_off, AiState.closed},
     AiState.browsing: {AiState.recommending, AiState.ordering, AiState.handed_off, AiState.closed},
     AiState.recommending: {AiState.browsing, AiState.ordering, AiState.handed_off, AiState.closed},
-    AiState.ordering: {AiState.awaiting_location, AiState.recommending, AiState.handed_off, AiState.closed},
+    AiState.ordering: {AiState.awaiting_location, AiState.awaiting_payment, AiState.recommending, AiState.handed_off, AiState.closed},
     AiState.awaiting_location: {AiState.awaiting_payment, AiState.ordering, AiState.handed_off, AiState.closed},
     AiState.awaiting_payment: {AiState.payment_review, AiState.handed_off, AiState.closed},
     AiState.payment_review: {AiState.handed_off, AiState.closed},
@@ -36,6 +36,8 @@ def infer_next_state(current: AiState, used_tools: list[str]) -> AiState:
     if "submit_payment" in used_tools or "submit_receipt" in used_tools:
         return AiState.payment_review
     if "get_payment_card" in used_tools:
+        return AiState.awaiting_payment if can_transition(current, AiState.awaiting_payment) else current
+    if "set_delivery_address" in used_tools:  # matnli manzil qabul qilindi -> to'lov bosqichi
         return AiState.awaiting_payment if can_transition(current, AiState.awaiting_payment) else current
     if "request_location" in used_tools:
         return AiState.awaiting_location

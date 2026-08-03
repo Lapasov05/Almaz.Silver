@@ -243,6 +243,73 @@ class DeliveryService:
             address_text=address_text, phone=phone, landmark=landmark, apartment=apartment,
         )
 
+    # ---------- Matnli manzil (fallback — xarita ishlamasa/mijoz matn yozsa, TZ 11) ----------
+    @staticmethod
+    def _zone_from_text(address_text: str) -> str:
+        """Manzil MATNIdan zona taxminini aniqlaydi (koordinatasiz).
+
+        "Toshkent shahri" -> tashkent; "Toshkent viloyati" yoki boshqa viloyat -> region.
+        Aniq emas — operator baribir tekshiradi; narx model zonaga bog'liq emas (kuryerga to'lanadi).
+        """
+        low = (address_text or "").lower()
+        has_tashkent = any(k in low for k in ("toshkent", "tashkent", "тошкент", "ташкент"))
+        is_region = any(k in low for k in ("viloyat", "вилоят", "tuman", "туман"))
+        if has_tashkent and not is_region:
+            return DeliveryZone.tashkent.value
+        return DeliveryZone.region.value
+
+    async def set_text_address(
+        self, order_id: uuid.UUID, address_text: str, *, phone: str | None = None
+    ) -> Delivery:
+        """Mijoz manzilni MATN bilan bergan holat — xarita/koordinata talab qilinmaydi.
+
+        Buyurtmага manzilni bog'laydi, zonani matndan taxmin qiladi, holatni `waiting_payment`ga
+        o'tkazadi. Yetkazish puli 0 (kuryerga/BTS bazasida to'lanadi — mahsulot summasi prepaid).
+        """
+        order = await self.orders.get(order_id)
+        if order is None:
+            raise NotFoundError("Buyurtma topilmadi")
+        address_text = (address_text or "").strip()
+        if not address_text:
+            raise AppError("Manzil matni bo'sh")
+
+        resolved_zone = self._zone_from_text(address_text)
+        if resolved_zone == DeliveryZone.tashkent.value:
+            location_type, provider = LocationType.toshkent.value, DeliveryProvider.yandex.value
+        else:
+            location_type, provider = LocationType.bts.value, DeliveryProvider.bts.value
+
+        delivery = await self.repo.get_by_order(order_id)
+        if delivery is None:
+            delivery = Delivery(order_id=order_id)
+            await self.repo.add(delivery)
+
+        delivery.zone = resolved_zone
+        delivery.provider = provider
+        delivery.location_type = location_type
+        delivery.address_text = address_text
+        delivery.fee = Decimal("0")
+        delivery.status = DeliveryStatus.ready.value
+        if phone:
+            delivery.phone = phone[:32]
+            from app.modules.inbox.models import Customer
+
+            customer = await self.db.get(Customer, order.customer_id)
+            if customer is not None and not (customer.phone or "").strip():
+                customer.phone = phone[:32]
+
+        order.delivery_fee = Decimal("0")
+        order.grand_total = order.items_total  # yetkazish qo'shilmaydi (kuryerga to'lanadi)
+        if order.status == OrderStatus.pending.value:
+            order.history.append(
+                OrderStatusHistory(
+                    from_status=order.status, to_status=OrderStatus.waiting_payment.value, changed_by=None
+                )
+            )
+            order.status = OrderStatus.waiting_payment.value
+        await self.db.commit()
+        return delivery
+
     # ---------- CRM ----------
     async def get_by_order(self, order_id: uuid.UUID) -> Delivery:
         delivery = await self.repo.get_by_order(order_id)

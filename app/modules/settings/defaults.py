@@ -52,6 +52,27 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # Mijoz buyurtma bo'yicha shikoyat bildirsa AI shu raqamni beradi (o'zgartirilishi mumkin).
     "complaint_phone": "774444413",
 
+    # --- Operator / do'kon aloqasi (AI mijozga beradi) ---
+    # Mijoz "raqam", "operator", "aloqa" so'rasa AI shu raqamni beradi. Bo'sh bo'lsa handoff qiladi.
+    "operator_phone": "",
+
+    # --- Do'kon (OFFLINE — jismoniy do'kon) ---
+    # MUHIM: bu ONLINE do'kon EMAS. Mijoz do'konga kelib o'zi olishi ham mumkin; kela olmasa —
+    # yetkazib beramiz (Yandex/BTS). AI hech qachon "faqat onlayn ishlaymiz" DEMASIN.
+    "store_offline": True,
+    "store_pickup_enabled": True,          # mijoz do'kondan o'zi olib ketishi mumkin
+    "store_address": "",                   # do'kon manzili (mijozga beriladi) — settingsdan to'ldiriladi
+    "store_work_hours": "09:00–21:00",     # do'kon ish vaqti (kelib olish uchun)
+
+    # --- Manzilni MATN bilan qabul qilish (TZ 11 fallback) ---
+    # Mijoz xarita linkidan foydalana olmasa yoki manzilni MATN bilan yozsa — shuni qabul qilamiz
+    # (viloyat/tuman/mo'ljal). Zona (Toshkent/viloyat) matndan taxminiy aniqlanadi; operator tekshiradi.
+    "accept_text_address": True,
+
+    # --- AI TEST rejimi (mijozga bildiriladi) ---
+    # True bo'lsa: har suhbat boshida mijozga AI test rejimida ekani bir marta ma'lum qilinadi.
+    "ai_test_mode": False,
+
     # --- Garantiya (kafolat) ---
     # Global default: yoqish + muddat (oy) + matn. Mahsulotда `warranty_months` bo'lsa, o'sha ustun keladi.
     "warranty_enabled": True,
