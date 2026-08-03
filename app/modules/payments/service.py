@@ -122,6 +122,9 @@ class PaymentService:
         from app.modules.ai.prompt_registry import get_ai_text
 
         await self._notify_customer(order.customer_id, await get_ai_text(self.db, "ai_msg_payment_approved"))
+        # Admin buyurtmani oldi (tasdiqladi) — endi o'zi aloqaga chiqadi. AI'ni MALUM VAQTGA pauza
+        # qilamiz (aralashmasin). Doimiy o'chmaydi — pauza tugagach yoki operator force bilan qaytadi.
+        await self._pause_ai(order.customer_id)
         return await self.get(payment_id)
 
     # ---------- Reject ----------
@@ -169,6 +172,27 @@ class PaymentService:
             return
         inbox = InboxService(InboxRepository(self.db))
         await inbox.notify_customer(customer_id, customer.channel, text)
+
+    async def _pause_ai(self, customer_id: uuid.UUID) -> None:
+        """Mijozning ochiq suhbatida AI'ni `handoff_pause_minutes`ga pauza qiladi (admin qo'lga oldi).
+
+        Best-effort — asosiy oqimni buzmaydi. Pauza tugagach AI qayta ishlaydi (doimiy o'chmaydi).
+        """
+        from datetime import timedelta
+
+        try:
+            customer = await self.db.get(Customer, customer_id)
+            if customer is None:
+                return
+            repo = InboxRepository(self.db)
+            conv = await repo.get_open_conversation(customer_id, customer.channel)
+            if conv is None:
+                return
+            minutes = int(await self._setting("handoff_pause_minutes", 60) or 60)
+            conv.ai_paused_until = _utcnow() + timedelta(minutes=minutes)
+            await self.db.commit()
+        except Exception:  # noqa: BLE001
+            pass
 
     # ---------- O'qish ----------
     async def get(self, payment_id: uuid.UUID) -> Payment:

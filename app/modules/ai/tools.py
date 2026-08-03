@@ -199,6 +199,28 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "set_delivery_address",
+            "description": (
+                "Manzilni MATN bilan qabul qiladi (xarita/link SHART EMAS) — FALLBACK: mijoz xarita "
+                "linkidan foydalana olmaganda ('topolmadim/ishlamadi') YOKI manzilni to'g'ridan-to'g'ri "
+                "matn bilan yozganida ('Samarqand viloyati Narpay tumani Mirbozor', '📪 Qashqadaryo "
+                "Kitob') chaqiring. Zona matndan aniqlanadi. Chaqirilgач tizim mijozga yetkazish "
+                "ma'lumoti + to'lov kartasini AVTOMATIK yuboradi. order_id ixtiyoriy (berilmasa faol buyurtma)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "address_text": {"type": "string", "description": "Mijoz yozgan to'liq manzil (viloyat/tuman/mo'ljal)"},
+                    "phone": {"type": "string", "description": "Telefon raqami (mijoz shu xabarда bergan bo'lsa, ixtiyoriy)"},
+                    "order_id": {"type": "string", "description": "Ixtiyoriy"},
+                },
+                "required": ["address_text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_order_summary",
             "description": (
                 "Buyurtma XULOSASI: mahsulotlar, mahsulotlar summasi (items_total), yetkazish narxi "
@@ -885,6 +907,36 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             return {"error": "Faol buyurtma topilmadi — avval create_order chaqiring."}
         url, _token, expires_at = await DeliveryService(db).create_checkout_link(order.id)
         return {"checkout_url": url, "expires_at": expires_at.isoformat()}
+
+    if name == "set_delivery_address":
+        from app.core.exceptions import AppError
+        from app.modules.delivery.service import DeliveryService
+
+        if not bool(await _get_setting(db, "accept_text_address", True)):
+            return {"error": "Matnli manzil o'chirilgan — request_location bilan xarita linkini bering."}
+        order = await _resolve_order(db, ctx, args.get("order_id"))
+        if order is None:
+            return {"error": "Faol buyurtma topilmadi — avval create_order chaqiring."}
+        try:
+            delivery = await DeliveryService(db).set_text_address(
+                order.id, args.get("address_text", ""), phone=(args.get("phone") or None)
+            )
+        except AppError as exc:
+            return {"error": exc.message}
+        # Manzil qabul qilingach — yetkazish ma'lumoti + karta + chek so'rovi AVTOMATIK ketadi
+        # (xarita confirm bilan bir xil follow-up). ism/telefon yetmasa avval o'shani so'raydi.
+        from app.modules.delivery.checkout import _send_payment_followup
+
+        await db.refresh(order)
+        await _send_payment_followup(db, order)
+        return {
+            "saved": True,
+            "address": delivery.address_text,
+            "zone": delivery.zone,
+            "location_type": delivery.location_type,
+            "note": "Manzil qabul qilindi. Tizim yetkazish ma'lumoti + kartani yubordi (ism/telefon "
+                    "bo'lsa). Kartani QAYTA yubormang.",
+        }
 
     if name == "get_order_summary":
         from app.modules.delivery.repository import DeliveryRepository
