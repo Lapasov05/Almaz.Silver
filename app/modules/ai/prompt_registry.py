@@ -86,16 +86,18 @@ AI_PROMPTS: list[dict] = [
         "used_in": "app/modules/ai/agent.py::_active_order_context (guide)",
         "placeholders": "",
         "value": "Buyurtma yo'lda. Mijoz buyumni OLGANINI aytsa ('oldim', 'yetib keldi', 'rahmat') — "
-                 "complete_order chaqir (buyurtma yakunlanadi) va minnatdorchilik bildir. Shikoyat/norozilik "
-                 "bo'lsa shikoyat raqamini ber. Oddiy savol bo'lsa javob ber. Boshqa mahsulot so'rasa — yordam ber.",
+                 "complete_order chaqir (buyurtma yakunlanadi) va minnatdorchilik bildir. Mijoz OLMAGANINI/"
+                 "kelmaganini aytsa ('olmadim', 'kelmadi', 'hali yo'q') — BAHSLASHMA, 'yetkazildi' DEMA: "
+                 "muloyim uzr ayt, operator raqamini ber va handoff_to_operator chaqir. Boshqa savol/mahsulot — yordam ber.",
     },
     {
         "key": "ai_ctx_order_guide_delivered",
         "purpose": "Buyurtma 'delivered' — mijoz olganini tasdiqlasa complete_order.",
         "used_in": "app/modules/ai/agent.py::_active_order_context (guide)",
         "placeholders": "",
-        "value": "Buyurtma yetkazilgan. Mijoz olganini tasdiqlasa complete_order chaqir. Shikoyat bo'lsa "
-                 "shikoyat raqamini ber.",
+        "value": "Buyurtma yetkazilgan. Mijoz olganini tasdiqlasa complete_order chaqir. Mijoz OLMAGANINI "
+                 "aytsa ('olmadim', 'kelmadi') — BAHSLASHMA, 'yetkazildi' deб turib olma: muloyim uzr ayt, "
+                 "operator raqamini ber va handoff_to_operator chaqir (operator tekshiradi). Shikoyat -> raqam.",
     },
     {
         "key": "ai_ctx_order_guide_default",
