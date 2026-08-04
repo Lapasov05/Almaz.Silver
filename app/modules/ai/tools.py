@@ -292,6 +292,22 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "send_box_images",
+            "description": (
+                "Rangli QUTILARNING (box) RASMLARINI mijozga yuboradi — mijoz 'quti rasmlarini yubor', "
+                "'qutilarni ko'rsat', 'rangli qutilar rasmi' desa ishlating. Har quti rasmi tagida rang "
+                "va narx (tekin/pulli) ketadi. Aniq mahsulot bo'lsa `product_id` bering (o'sha kategoriya "
+                "qutilari); mijoz UMUMIY so'rasa product_id'siz chaqiring. Rasmi bor qutilar yuboriladi."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"product_id": {"type": "string", "description": "Ixtiyoriy — aniq mahsulot bo'lsa"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "resolve_instagram_media",
             "description": (
                 "Instagram post/story linkidan yoki story javobidan mahsulotni topadi (bazadan). "
@@ -489,6 +505,8 @@ def _box_brief(box) -> dict:
         "price": _num(box.price),  # 0.0 = tekin
         "free": box.is_free,
         "available": max(box.available, 0),
+        # Quti RASMLARI (BoxMedia) — AI send_box_images bilan yuborishi uchun. Bo'sh bo'lsa rasm yo'q.
+        "images": [m.image_url for m in (box.media or []) if getattr(m, "image_url", None)][:5],
     }
 
 
@@ -793,6 +811,37 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         if product is not None:
             return {"boxes": await _boxes_for_product(db, product)}
         return {"boxes": await _all_boxes(db)}
+
+    if name == "send_box_images":
+        from app.modules.ai.guardrail import enforce
+        from app.modules.inbox.repository import InboxRepository
+        from app.modules.inbox.service import InboxService
+
+        inbox = InboxService(InboxRepository(db))
+        raw = args.get("product_id")
+        boxes: list[dict] = []
+        if raw:
+            try:
+                product = await CatalogRepository(db).get_product(uuid.UUID(str(raw)))
+            except (ValueError, TypeError):
+                product = None
+            if product is not None:
+                boxes = await _boxes_for_product(db, product)
+        if not boxes:
+            boxes = await _all_boxes(db)
+        sent, skipped = 0, 0
+        for b in boxes:
+            imgs = b.get("images") or []
+            if not imgs:
+                skipped += 1  # rasmi yo'q quti — yuborilmaydi
+                continue
+            price = int(b.get("price") or 0)
+            price_txt = "tekin" if b.get("free") else f"+{price:,} so'm".replace(",", " ")
+            # MUHIM (IG tartibi): avval RASM (captionsiz), keyin alohida matn (rang + narx)
+            await inbox.send_media(ctx.conversation, imgs[0], caption=None)
+            await inbox.ai_send(ctx.conversation, enforce(f"{b['color']} quti — {price_txt}").text)
+            sent += 1
+        return {"sent": sent, "skipped_no_image": skipped}
 
     if name == "send_product_images":
         from app.modules.inbox.repository import InboxRepository
