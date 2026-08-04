@@ -107,7 +107,11 @@ class InstagramClient:
             resp = await client.post(url, params={"access_token": self._token}, json=body)
             if resp.status_code >= 400:
                 raise ChannelError(f"Instagram rasm yuborish xato: {resp.status_code} {resp.text[:200]}")
-            result_id = resp.json().get("message_id")
+            data = resp.json()
+            # IG ba'zan 200 bilan {"error": ...} qaytaradi (rasm URL'ini ololmasa) — jim o'tmasin
+            if isinstance(data, dict) and data.get("error"):
+                raise ChannelError(f"Instagram rasm rad etildi (200): {str(data['error'])[:200]}")
+            result_id = data.get("message_id")
             if caption:  # rasmdan KEYIN matn
                 await client.post(url, params={"access_token": self._token},
                                   json={"recipient": {"id": recipient_id}, "message": {"text": caption}})
