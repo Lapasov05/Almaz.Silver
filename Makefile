@@ -78,15 +78,14 @@ ai-prompts-seed-force: ## AI promtlarni registr standarti bilan QAYTA yozadi (DB
 	$(DC) exec -T -e FORCE=1 api python -m app.seed_ai_prompts
 seed-boxes: ## Rangli qutilar (box) seed — har kategoriyaga standart ranglar (Pushti/Oq/...), tekin+zaxira
 	$(DC) exec -T api python -m app.seed_boxes
-apply-fixes: ## ⭐ 2026-08-03 TUZATISHLAR (bitta buyruq): rebuild + settings + AI prompt(force) + quti seed
+apply-fixes: ## ⭐ TUZATISHLARNI QO'LLASH (bitta buyruq): rebuild + settings + AI prompt(force). QUTILARGA TEGMAYDI.
 	$(DC) up -d --build
 	$(DC) exec -T api python -m app.seed
 	$(DC) exec -T -e FORCE=1 api python -m app.seed_ai_prompts
-	$(DC) exec -T api python -m app.seed_boxes
 	@echo ""
-	@echo "✅ Tuzatishlar qo'llandi (matnli manzil / offline do'kon / test rejim / o'lcham-crash / qutilar)."
+	@echo "✅ Tuzatishlar qo'llandi (kod + settings + AI prompt). Qutilar (box) TEGILMADI — CRM'dan boshqariladi."
 	@echo "   ➜ Settings'da to'ldiring: operator_phone, store_address, store_work_hours."
-	@echo "   ➜ AI testni yoqish: ai_test_mode = true."
+	@echo "   ➜ Qutilarni boshlang'ich to'ldirish kerak bo'lsa (faqat bo'sh kategoriyalarga): make seed-boxes"
 seed-integrations: ## Integration config qatorlarini yaratish (placeholder)
 	$(DC) exec -T api python -m app.seed_integrations
 shell: ## API konteyner ichiga bash
