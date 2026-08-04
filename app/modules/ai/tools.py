@@ -542,6 +542,37 @@ async def _resolve_variant_id(repo, catalog, raw):
     return None
 
 
+async def _resolve_box_id(db: AsyncSession, category_id, raw):
+    """AI bergan box'ni haqiqiy box id'ga hal qiladi (chidamli).
+
+    Qabul qiladi: box UUID | RANG NOMI ("qizil", "Pushti"). AI ko'pincha UUID o'rniga rang nomini
+    yuboradi — shundagi 'quti topilmadi -> qayta urinish' loopini (fallback/handoff) oldini oladi.
+    Topilmasa None.
+    """
+    if not raw or category_id is None:
+        return None
+    raw = str(raw).strip()
+    boxes = await CatalogRepository(db).list_active_boxes(category_id)
+    # 1) UUID mos kelsa
+    try:
+        bid = uuid.UUID(raw)
+        for b in boxes:
+            if b.id == bid:
+                return b.id
+    except (ValueError, TypeError):
+        pass
+    # 2) rang NOMI bo'yicha (aniq, keyin qismli)
+    low = raw.lower()
+    for b in boxes:
+        if (b.name_uz or "").lower() == low:
+            return b.id
+    for b in boxes:
+        nm = (b.name_uz or "").lower()
+        if nm and (low in nm or nm in low):
+            return b.id
+    return None
+
+
 # Buyurtma statuslari — mijozga tushunarli o'zbekcha matn
 _ORDER_STATUS_UZ: dict[str, str] = {
     "draft": "shakllantirilmoqda",
@@ -848,12 +879,12 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             if vid is None:
                 return {"error": f"Mahsulot/variant topilmadi: {it.get('variant_id')!r}. "
                                  f"Avval search_product bilan toping va default_variant_id ni bering."}
+            # Box: UUID yoki RANG NOMI ("qizil") — ikkalasini ham hal qilamiz (AI nom yuborsa loop bo'lmasin)
             box_id = None
             if it.get("box_id"):
-                try:
-                    box_id = uuid.UUID(str(it["box_id"]))
-                except (ValueError, TypeError):
-                    box_id = None
+                variant = await repo.get_variant(vid)
+                product = await repo.get_product(variant.product_id) if variant else None
+                box_id = await _resolve_box_id(db, product.category_id if product else None, it.get("box_id"))
             items.append(OrderItemCreate(
                 variant_id=vid,
                 quantity=int(it.get("quantity", 1)),
