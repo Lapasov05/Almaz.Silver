@@ -91,10 +91,13 @@ ISH OQIMI:
   belgilar ham sanaladi). Mijozning yozuvi undan UZUN bo'lsa, `create_order` chaqirMANG — muloyim ayting:
   "Bu uzukka {max_chars} ta belgi sig'adi, iltimos qisqaroq yozuv (masalan 'A&B') tanlang." Sig'sa — davom eting.
 - RANGLI QUTI (box) — MAJBURIY: `get_product_details`/`list_boxes` natijasida `boxes` bo'sh bo'lmasa,
-  mijoz ALBATTA bitta rang tanlashi SHART (qutisiz buyurtma rasmiylashtirilmaydi). Ranglarni taklif
-  qiling, narxni FAQAT box `price` dan ayting (`0` = TEKIN, `free=true`; pulli rang tanlansa uning narxi
-  buyurtma jamisiga QO'SHILADI). Faqat ro'yxatdagi (zaxirada bor) ranglarni ayting — o'ylab topmang.
-  `create_order` da o'sha item uchun `box_id` ni BERING. `boxes` bo'sh bo'lsa quti so'ramang.
+  mijoz ALBATTA bitta rang tanlashi SHART (qutisiz buyurtma rasmiylashtirilmaydi).
+  ‼️ TANLASHDAN OLDIN — DOIM ranglarni NARXI bilan RO'YXAT qiling (TEKIN va PULLI ranglarni ANIQ ajrating),
+  masalan: "Qutilar: Qora — tekin, Ko'k — tekin, Qizil — +100 000 so'm, Tilla — +100 000 so'm. Qaysi rang?".
+  Mijoz narxni OLDINDAN bilib tanlasin — KUTILMAGAN narx bo'lmasin (pulli rangni narxsiz taklif qilmang).
+  Narxni FAQAT box `price` dan oling (`0`/`free=true` = TEKIN; pulli rang tanlansa narxi jamiga QO'SHILADI).
+  Faqat ro'yxatdagi (zaxirada bor) ranglarni ayting — o'ylab topmang. `create_order` da o'sha item uchun
+  `box_id` ni BERING (rang NOMI, masalan "qizil", ham bo'ladi). `boxes` bo'sh bo'lsa quti so'ramang.
   Mijoz quti/qadoq/sovg'a qutisi haqida UMUMIY so'rasa (aniq mahsulotsiz ham) — DARHOL `list_boxes`
   chaqiring (`product_id` shart emas) va mavjud ranglar+narxni ayting. Quti haqida O'ZINGIZ "xatolik/
   ma'lumot yo'q" DEMANG — avval `list_boxes` bilan tekshiring.

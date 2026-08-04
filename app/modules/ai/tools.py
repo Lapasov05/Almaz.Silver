@@ -411,7 +411,26 @@ def _product_brief(product: Product, ctx: dict | None = None) -> dict:
     return brief
 
 
-def _image_caption(product: Product) -> str:
+def _format_boxes_line(boxes: list[dict]) -> str | None:
+    """Quti (rang) variantlarini bitta qatorда formatlaydi: tekinlar birga, pullilar narxi bilan.
+
+    Masalan: "Qutilar: Qora, Ko'k (tekin) · Qizil, Tilla (+100 000 so'm)". Bo'sh bo'lsa None.
+    Mijoz quti tanlaшдан oldin narxni ko'rib turishi uchun (kutilmagan narx bo'lmasin).
+    """
+    if not boxes:
+        return None
+    free = [b["color"] for b in boxes if b.get("free")]
+    paid = [b for b in boxes if not b.get("free")]
+    parts: list[str] = []
+    if free:
+        parts.append(", ".join(free) + " (tekin)")
+    for b in paid:
+        price = int(b.get("price") or 0)
+        parts.append(f"{b['color']} (+{price:,} so'm)".replace(",", " "))
+    return "Qutilar: " + " · ".join(parts) if parts else None
+
+
+def _image_caption(product: Product, box_line: str | None = None) -> str:
     """Mahsulot rasmi ostidagi izoh — nom, narx (chegirma bo'lsa eski narx ham), material, tosh.
 
     Guardrail send_media ichida caption'ni ham tekshiradi (taqiqlangan atama almashadi).
@@ -431,6 +450,8 @@ def _image_caption(product: Product) -> str:
         lines.append(" · ".join(detail))
     if product.requires_ring_size:
         lines.append("O'lcham (razmer)ni belgilashingiz mumkin.")
+    if box_line:  # quti (rang) variantlari narxi bilan — mahsulot kartasida ko'rinadi
+        lines.append(box_line)
     return "\n".join(lines)
 
 
@@ -613,12 +634,17 @@ async def _order_items_brief(db: AsyncSession, order) -> list[dict]:
     for it in order.items:
         variant = await repo.get_variant(it.variant_id)
         product = await repo.get_product(variant.product_id) if variant else None
+        box = await repo.get_box(it.box_id) if it.box_id else None
         out.append({
             "name": product.name_uz if product else "?",
             "quantity": it.quantity,
             "ring_size": it.ring_size,
             "unit_price": _num(it.unit_price),
             "engraving_text": it.engraving_text,
+            "engraving_price": _num(getattr(it, "engraving_price", None)),
+            # Quti (rang) — xulosada alohida ko'rsatish uchun: rang + narx (0 = tekin)
+            "box_color": box.name_uz if box else None,
+            "box_price": _num(it.box_price),
         })
     return out
 
@@ -791,8 +817,9 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             # rasm → tagidan ma'lumot (nom, narx, material, tosh). Har mahsulot ketma-ket.
             from app.modules.ai.guardrail import enforce
 
+            box_line = _format_boxes_line(await _boxes_for_product(db, product))  # quti variantlari (narx bilan)
             await inbox.send_media(ctx.conversation, img, caption=None)
-            await inbox.ai_send(ctx.conversation, enforce(_image_caption(product)).text)
+            await inbox.ai_send(ctx.conversation, enforce(_image_caption(product, box_line)).text)
             sent += 1
         return {"sent": sent, "skipped_no_image": skipped}
 
