@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     ai_default_model: str = "gpt-4o"        # settings.llm_model ustun keladi
     ai_default_temperature: float = 0.7     # settings.ai_temperature ustun keladi
     ai_memory_message_count: int = 15       # xotira uchun oxirgi N xabar (TZ 7.3)
-    ai_max_tool_iterations: int = 10        # tool-calling sikli chegarasi (buyurtma oqimi ko'p tool chaqiradi)
+    ai_max_tool_iterations: int = 16        # tool-calling sikli chegarasi (mahsulot+quti rasmlari + buyurtma ko'p tool chaqiradi)
     ai_reply_delay_seconds: float = 7.0     # javob oldidan insonsimon pauza (typing ko'rinadi)
 
     # --- MinIO / S3 ---
