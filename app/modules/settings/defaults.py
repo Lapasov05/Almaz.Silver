@@ -96,4 +96,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     # To'lov chekini tasdiqlash (TZ 12): owner/manager Telegram chat + javobgar CRM user
     "payment_review_telegram_chat_id": None,
     "payment_reviewer_user_id": None,
+    # Tasdiqlangan buyurtmalar yuboriladigan Telegram GURUH chat id (faqat to'lov tasdiqlangач).
+    # Bo'sh bo'lsa — yuborilmaydi. Guruh id odatda manfiy (masalan -1001234567890).
+    "orders_group_telegram_chat_id": None,
 }

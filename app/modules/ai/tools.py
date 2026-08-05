@@ -780,6 +780,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             if v.deleted_at is None
         ]
         brief["boxes"] = await _boxes_for_product(db, product)  # kategoriya rangli qutilari
+        brief["boxes_display"] = _format_boxes_line(brief["boxes"])  # mijozga toza format
         if product.is_combo:  # combo (to'plam) — ichidagi mahsulotlar
             items = await CatalogRepository(db).list_combo_items(product.id)
             brief["is_combo"] = True
@@ -808,9 +809,9 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 product = await CatalogRepository(db).get_product(uuid.UUID(str(raw)))
             except (ValueError, TypeError):
                 product = None
-        if product is not None:
-            return {"boxes": await _boxes_for_product(db, product)}
-        return {"boxes": await _all_boxes(db)}
+        boxes = await _boxes_for_product(db, product) if product is not None else await _all_boxes(db)
+        # `display` — mijozga AYNAN shu matnni ko'rsatish uchun toza format ("0 so'm" YOZMA)
+        return {"boxes": boxes, "display": _format_boxes_line(boxes)}
 
     if name == "send_box_images":
         from app.modules.ai.guardrail import enforce

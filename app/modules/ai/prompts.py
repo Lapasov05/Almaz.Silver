@@ -101,9 +101,11 @@ ISH OQIMI:
   "Bu uzukka {max_chars} ta belgi sig'adi, iltimos qisqaroq yozuv (masalan 'A&B') tanlang." Sig'sa — davom eting.
 - RANGLI QUTI (box) — MAJBURIY: `get_product_details`/`list_boxes` natijasida `boxes` bo'sh bo'lmasa,
   mijoz ALBATTA bitta rang tanlashi SHART (qutisiz buyurtma rasmiylashtirilmaydi).
-  ‼️ TANLASHDAN OLDIN — DOIM ranglarni NARXI bilan RO'YXAT qiling (TEKIN va PULLI ranglarni ANIQ ajrating),
-  masalan: "Qutilar: Qora — tekin, Ko'k — tekin, Qizil — +100 000 so'm, Tilla — +100 000 so'm. Qaysi rang?".
-  Mijoz narxni OLDINDAN bilib tanlasin — KUTILMAGAN narx bo'lmasin (pulli rangni narxsiz taklif qilmang).
+  ‼️ TANLASHDAN OLDIN — ranglarni NARXI bilan ko'rsating. TOZA FORMAT: `list_boxes`/`get_product_details`
+  natijasidagi tayyor `display` (yoki `boxes_display`) matnini AYNAN ishlating, masalan:
+  "Qutilar: Qora, Ko'k (tekin) · Qizil (+100 000 so'm) · Tilla (+100 000 so'm). Qaysi rang?".
+  ⛔ "Qora (0 so'm, tekin)" kabi YOZMA — tekin ranglar uchun FAQAT "tekin" (narx yozmang), tekinlarni
+  birga guruhlang; pulli ranglarni "+NARX so'm" bilan bering. Mijoz narxni OLDINDAN bilib tanlasin.
   Narxni FAQAT box `price` dan oling (`0`/`free=true` = TEKIN; pulli rang tanlansa narxi jamiga QO'SHILADI).
   Faqat ro'yxatdagi (zaxirada bor) ranglarni ayting — o'ylab topmang. `create_order` da o'sha item uchun
   `box_id` ni BERING (rang NOMI, masalan "qizil", ham bo'ladi). `boxes` bo'sh bo'lsa quti so'ramang.

@@ -123,8 +123,13 @@ class PaymentService:
 
         await self._notify_customer(order.customer_id, await get_ai_text(self.db, "ai_msg_payment_approved"))
         # Admin buyurtmani oldi (tasdiqladi) — endi o'zi aloqaga chiqadi. AI'ni MALUM VAQTGA pauza
-        # qilamiz (aralashmasin). Doimiy o'chmaydi — pauza tugagach yoki operator force bilan qaytadi.
+        # qilamiz (aralashmasin). Doimiy o'chmaydi — pauza tugagач yoki operator force bilan qaytadi.
         await self._pause_ai(order.customer_id)
+        # Tasdiqlangan buyurtmani Telegram GURUHiga yuboramiz (faqat tasdiqlanganда). Best-effort.
+        try:
+            await NotificationService(self.db).notify_order_confirmed(order)
+        except Exception:  # noqa: BLE001 — guruh xabari approve'ni buzmasin
+            logger.warning("guruhga tasdiqlangan buyurtma yuborilmadi (order=%s)", order.id, exc_info=True)
         return await self.get(payment_id)
 
     # ---------- Reject ----------
