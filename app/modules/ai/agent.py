@@ -322,6 +322,11 @@ class Agent:
                     status="replied", reply=notice, message_id=message.id,
                     used_tools=["handoff_to_operator"], state=conv.ai_state,
                 )
+            # Buyurtmasiz join — ogohlantirishni ENG AVVAL alohida xabar qilib yuboramiz (mahsulot
+            # kartalari/javobdan OLDIN ko'rinsin), keyin normal javob beradi.
+            notice = await get_ai_text(self.db, "ai_msg_test_mode_notice")
+            if notice:
+                await inbox_svc.ai_send(conv, notice)
 
         # --- Prompt + memory (TZ 7.2/7.3) ---
         prompt_version = int(await _setting(self.db, "prompt_version", 1) or 1)
@@ -415,13 +420,8 @@ class Agent:
         if not force and await _is_superseded(self.db, conv.id, trigger_message_id):
             return AgentOutcome(status="skipped", reason="superseded", state=conv.ai_state)
 
-        # --- TEST rejimi: AI join qildi, buyurtma YO'Q — javob oldiga yumshoq ogohlantirish ---
-        # (buyurtmasi BOR holat yuqorida allaqachon operatorga o'tkazilib qaytdi).
+        # TEST rejimi ogohlantirishi test_join'да ENG AVVAL alohida yuborildi (yuqorида) — bu yerда takrorlamaymiz.
         final_text = guard.text
-        if test_join:
-            notice = await get_ai_text(self.db, "ai_msg_test_mode_notice")
-            if notice:
-                final_text = f"{notice}\n\n{final_text}"
 
         # --- Javobni yuborish (AI, pauza qo'ymaydi) ---
         message = await inbox_svc.ai_send(conv, final_text)
