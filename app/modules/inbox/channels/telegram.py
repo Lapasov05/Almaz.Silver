@@ -32,6 +32,13 @@ def parse_update(update: dict) -> NormalizedIncoming | None:
     if not msg:
         return None  # boshqa update turlari (callback, join va h.k.) — hozir e'tiborsiz
 
+    # GURUH/kanal xabarlarini E'TIBORSIZ qoldiramiz — bot faqat SHAXSIY (private) suhbatlarda mijoz
+    # bilan ishlaydi. Orders-guruhi (yoki bot a'zo bo'lgan boshqa guruh) xabarlari inbox'ga tushmasin
+    # va AI ularга javob bermasin (bot privacy off bo'lsa ham). Guruhga faqat xabar YUBORAMIZ.
+    chat_type = (msg.get("chat") or {}).get("type")
+    if chat_type and chat_type != "private":
+        return None
+
     frm = msg.get("from") or {}
     external_user_id = str(frm.get("id") or (msg.get("chat") or {}).get("id"))
     full_name = " ".join(
