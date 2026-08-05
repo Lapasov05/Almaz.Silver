@@ -175,18 +175,17 @@ AI_PROMPTS: list[dict] = [
                    "buyurtmani shu yerdan davom ettira oladi).",
         "used_in": "app/modules/ai/agent.py::respond (test_join, buyurtmasiz)",
         "placeholders": "",
-        "value": ("ℹ️ Salom! Men almazsilver'ning avtomatik yordamchisiman va hozircha test rejimida "
-                  "ishlayapman. Buyurtmangizni shu yerdan bemalol davom ettiraveraman 😊"),
+        "value": ("⚠️ Eslatma: men hozir TEST rejimida ishlayotgan avtomatik yordamchiman. Savol yoki "
+                  "buyurtma rasmiylashtirmoqchi bo'lsangiz — bemalol menga yozing, yordam beraman 😊"),
     },
     {
         "key": "ai_msg_test_mode_notice_has_order",
         "purpose": "TEST rejimi — AI suhbatga qo'shilganда mijozда DAVOM ETAYOTGAN buyurtma bo'lsa: AI o'zi "
-                   "davom etmaydi (buyurtmani hijack qilmaydi), admin/operator bog'lanishini yumshoq aytadi.",
+                   "davom etmaydi (buyurtmani hijack qilmaydi), admin o'zi javob berishini yumshoq aytadi.",
         "used_in": "app/modules/ai/agent.py::respond (test_join + mavjud buyurtma)",
         "placeholders": "{order_no}",
-        "value": ("ℹ️ Salom! Men almazsilver'ning avtomatik yordamchisiman (test rejimi). Sizda avval "
-                  "boshlangan buyurtma (№ {order_no}) bor ekan — uni operatorimiz shaxsan tekshirib, tez "
-                  "orada siz bilan bog'lanib, batafsil xabar beradi. 😊"),
+        "value": ("⚠️ Eslatma: men TEST rejimidagi avtomatik yordamchiman. Siz buyurtma jarayonidasiz "
+                  "(№ {order_no}) — buni adminimiz o'zi yakunlab, siz bilan bog'lanadi. Bir oz sabr qiling 😊"),
     },
     {
         "key": "ai_msg_location_confirmed_head",
