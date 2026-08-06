@@ -26,7 +26,7 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "search_catalog",
             "description": (
-                "Katalogdan real, zaxirada bor mahsulotlarni matn, Instagram shortcode yoki narx oralig'i "
+                "Katalogdan real, mavjud mahsulotlarni matn, Instagram shortcode yoki narx oralig'i "
                 "bo'yicha topadi. Natija products ichida product_id, default_variant_id, narx, xususiyatlar, "
                 "available va rasmlarni qaytaradi."
             ),
@@ -47,7 +47,7 @@ TOOL_SPECS: list[dict] = [
             "name": "get_product_details",
             "description": (
                 "Bitta mahsulotning aniq narxi, tavsifi, materiali, toshi, o'lchamlari, variantlari, "
-                "zaxirasi, qutilari, kafolati va xizmatlarini qaytaradi."
+                "mavjudligi, qutilari, kafolati va xizmatlarini qaytaradi."
             ),
             "parameters": {
                 "type": "object",
@@ -61,7 +61,7 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "check_availability",
             "description": (
-                "Buyurtmadan oldin tanlangan variantning joriy zaxirasini tekshiradi. available musbat bo'lsa "
+                "Buyurtmadan oldin tanlangan variantning joriy mavjudligini tekshiradi. available musbat bo'lsa "
                 "variant buyurtmaga mavjud."
             ),
             "parameters": {
@@ -76,7 +76,7 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "recommend_products",
             "description": (
-                "Aniq model aytilmagan sovg'a, uslub yoki umumiy ehtiyoj uchun zaxiradagi mahsulotlardan "
+                "Aniq model aytilmagan sovg'a, uslub yoki umumiy ehtiyoj uchun mavjud mahsulotlardan "
                 "2-5 ta tavsiya qaytaradi. Byudjet bo'lsa narx oralig'ini qo'llaydi."
             ),
             "parameters": {
@@ -142,7 +142,7 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "create_order",
             "description": (
-                "Buyurtma yaratish + zaxira band qilish. Uzuk uchun ring_size so'ralsin. "
+                "Buyurtma yaratish + mahsulotni band qilish. Uzuk uchun ring_size so'ralsin. "
                 "Mijoz uzukka ism yozdirmoqchi bo'lsa engraving_text yuboriladi (qo'shimcha narx)."
             ),
             "parameters": {
@@ -178,8 +178,8 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "list_categories",
             "description": (
-                "Zaxirada MAHSULOTI BOR kategoriyalar ro'yxati (har birida nechta zaxiradagi mahsulot bor). "
-                "Mijozga kategoriya/tur taklif qilishdan OLDIN shu tool'ni chaqiring — bo'sh yoki zaxirasi "
+                "MAHSULOTI BOR kategoriyalar ro'yxati (har birida nechta mavjud mahsulot bor). "
+                "Mijozga kategoriya/tur taklif qilishdan OLDIN shu tool'ni chaqiring — bo'sh yoki mahsuloti "
                 "tugagan kategoriyani taklif qilmang. Faqat shu ro'yxatdagilarni ayting."
             ),
             "parameters": {"type": "object", "properties": {}},
@@ -190,7 +190,7 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "list_category_products",
             "description": (
-                "Bitta kategoriyadagi zaxirada BOR barcha mahsulotlarni qaytaradi (matn qidiruvisiz). "
+                "Bitta kategoriyadagi MAVJUD barcha mahsulotlarni qaytaradi (matn qidiruvisiz). "
                 "Mijoz mahsulot TURINI so'raganda ('qanaqa uzuklar bor', 'brasletlaringizni ko'rsat', "
                 "'hammasini ko'rsat') shu tool ishlatiladi — search_catalog emas. category_id'ni "
                 "list_categories natijasidan oling; kategoriya NOMINI ('Uzuklar') bersangiz ham bo'ladi."
@@ -212,7 +212,7 @@ TOOL_SPECS: list[dict] = [
                 "Rangli qutilar (box) ro'yxati — mijoz qadoq/quti/sovg'a qutisi so'raganda yoki taklif "
                 "qilishdan oldin. Aniq mahsulot bo'lsa `product_id` bering (o'sha kategoriya qutilari); "
                 "mijoz UMUMIY so'rasa (masalan 'qanday qutilaringiz bor') `product_id` SIZ ham chaqiring "
-                "(barcha qutilar qaytadi). Narx 0 = tekin. Faqat zaxirada borlari qaytadi."
+                "(barcha qutilar qaytadi). Narx 0 = tekin. Faqat mavjudlari qaytadi."
             ),
             "parameters": {
                 "type": "object",
@@ -879,7 +879,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         return {
             "count": len(products),
             "products": [_product_brief(p, sctx) for p in products],
-            "note": "Shu kategoriyadagi zaxirada bor mahsulotlar. Hammasini bitta carouselda yuboring.",
+            "note": "Shu kategoriyadagi mavjud mahsulotlar. Hammasini bitta carouselda yuboring.",
         }
 
     if name == "list_boxes":
