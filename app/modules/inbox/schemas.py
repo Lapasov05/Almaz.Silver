@@ -24,6 +24,7 @@ class CustomerOut(BaseModel):
     full_name: str | None
     phone: str | None
     language: str
+    created_at: datetime   # mijoz qachondan beri ("mijoz sanasi")
 
 
 class CustomerUpdate(BaseModel):

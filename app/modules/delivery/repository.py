@@ -28,7 +28,11 @@ class DeliveryRepository:
         return await self.db.get(Delivery, delivery_id)
 
     async def get_by_order(self, order_id: uuid.UUID) -> Delivery | None:
-        res = await self.db.execute(select(Delivery).where(Delivery.order_id == order_id))
+        res = await self.db.execute(
+            select(Delivery)
+            .options(selectinload(Delivery.bts_branch))  # BTS filial ma'lumoti javobga kirsin
+            .where(Delivery.order_id == order_id)
+        )
         return res.scalar_one_or_none()
 
     async def get_token_by_hash(self, token_hash: str) -> CheckoutToken | None:

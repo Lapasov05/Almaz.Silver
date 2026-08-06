@@ -91,6 +91,9 @@ class DeliveryOut(BaseModel):
     landmark: str | None
     apartment: str | None
     status: DeliveryStatus
+    # BTS bo'lsa — tanlangan filial (nom, manzil, ish vaqti). Sotuvchi mijozga aytadi.
+    bts_branch_id: uuid.UUID | None = None
+    bts_branch: BtsBranchOut | None = None
 
 
 class CheckoutContextOut(BaseModel):

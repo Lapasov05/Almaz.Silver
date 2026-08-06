@@ -106,6 +106,9 @@ class Delivery(UUIDMixin, TimestampMixin, Base):
     checkout_tokens: Mapped[list["CheckoutToken"]] = relationship(
         back_populates="delivery", cascade="all, delete-orphan"
     )
+    # Tanlangan BTS filiali (mijozga "buyurtmangiz shu filialga boradi" deб ko'rsatish uchun).
+    # lazy=selectin: har Delivery yuklanganda avtomatik eager (async'да xavfsiz, hamma yo'lni qamraydi).
+    bts_branch: Mapped["BtsBranch | None"] = relationship("BtsBranch", lazy="selectin")
 
 
 class CheckoutToken(UUIDMixin, TimestampMixin, Base):
