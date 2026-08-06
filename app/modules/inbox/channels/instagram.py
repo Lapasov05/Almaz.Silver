@@ -46,21 +46,37 @@ def parse_payload(payload: dict) -> list[NormalizedIncoming]:
             sender_id = str((event.get("sender") or {}).get("id", ""))
             if not sender_id:
                 continue
+            raw_attachments = message.get("attachments") or []
+            text = message.get("text")
+            # IG telefon raqam/kontakt kartasi: matnsiz, faqat bo'sh `template` keladi.
+            # Bu mijoz xabari EMAS (raqam matn bilan allaqachon kelgan) — saqlamaymiz, AI ham qo'zg'almaydi.
+            if not text and raw_attachments and all(
+                (att.get("type") or "") == "template" for att in raw_attachments
+            ):
+                continue
             attachments = [
                 {"type": att.get("type"), "url": (att.get("payload") or {}).get("url")}
-                for att in message.get("attachments", [])
+                for att in raw_attachments
             ]
+            reply = message.get("reply_to") or {}
             # Story javobi: mijoz bizning story'ga javob berdi -> story media_id (mahsulotga bog'lash uchun)
-            story = (message.get("reply_to") or {}).get("story") or {}
+            story = reply.get("story") or {}
             if story.get("id"):
                 attachments.append(
                     {"type": "ig_story", "story_ref": str(story["id"]), "url": story.get("url")}
                 )
+            elif reply.get("mid"):
+                # Oddiy xabarga reply — AI qaysi xabar nazarda tutilganini bilishi uchun
+                attachments.append({
+                    "type": "reply",
+                    "reply_to_external_id": str(reply["mid"]),
+                    "is_self_reply": bool(reply.get("is_self_reply")),
+                })
             results.append(
                 NormalizedIncoming(
                     channel="instagram",
                     external_user_id=sender_id,
-                    text=message.get("text"),
+                    text=text,
                     external_message_id=message.get("mid"),
                     attachments=attachments,
                 )

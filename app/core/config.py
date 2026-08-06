@@ -107,7 +107,7 @@ class Settings(BaseSettings):
     # llm_provider: "openai" (real, DB'да kalit) | "fake" (dev/test, kalitsiz) | "none"
     llm_provider: str = "openai"
     ai_default_model: str = "gpt-5-mini"
-    ai_memory_message_count: int = 15       # xotira uchun oxirgi N xabar (TZ 7.3)
+    ai_memory_message_count: int = 500      # AI butun suhbatni ko'radi (amalda cheklovsiz, xavfsizlik chegarasi)
     ai_max_tool_iterations: int = 16        # tool-calling sikli chegarasi (mahsulot+quti rasmlari + buyurtma ko'p tool chaqiradi)
     ai_reply_delay_seconds: float = 7.0     # javob oldidan insonsimon pauza (typing ko'rinadi)
 

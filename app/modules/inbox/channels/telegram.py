@@ -52,6 +52,15 @@ def parse_update(update: dict) -> NormalizedIncoming | None:
             file_id = payload[-1]["file_id"] if kind == "photo" else payload.get("file_id")
             attachments.append({"type": kind, "file_id": file_id})
 
+    # Reply — AI qaysi xabar nazarda tutilganini bilishi uchun (IG bilan bir xil format)
+    replied = msg.get("reply_to_message") or {}
+    if replied.get("message_id"):
+        attachments.append({
+            "type": "reply",
+            "reply_to_external_id": str(replied["message_id"]),
+            "is_self_reply": (replied.get("from") or {}).get("id") == frm.get("id"),
+        })
+
     return NormalizedIncoming(
         channel="telegram",
         external_user_id=external_user_id,
