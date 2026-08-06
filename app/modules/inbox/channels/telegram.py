@@ -105,6 +105,26 @@ class TelegramClient:
         result = resp.json().get("result", {})
         return SendResult(external_message_id=str(result.get("message_id")) if result.get("message_id") else None)
 
+    async def send_images(self, recipient_id: str, items: list[dict]) -> SendResult:
+        if not self._token:
+            raise ChannelError("TELEGRAM_BOT_TOKEN sozlanmagan")
+        if len(items) == 1:
+            item = items[0]
+            caption = "\n".join(value for value in (item.get("title"), item.get("subtitle")) if value)
+            return await self.send_image(recipient_id, item["image_url"], caption)
+        media = []
+        for item in items[:10]:
+            caption = "\n".join(value for value in (item.get("title"), item.get("subtitle")) if value)
+            media.append({"type": "photo", "media": item["image_url"], "caption": caption[:1024]})
+        url = f"{self._base}/bot{self._token}/sendMediaGroup"
+        async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+            response = await client.post(url, json={"chat_id": recipient_id, "media": media})
+        if response.status_code != 200 or not response.json().get("ok"):
+            raise ChannelError(f"Telegram sendMediaGroup xato: {response.status_code} {response.text[:200]}")
+        messages = response.json().get("result") or []
+        message_id = messages[-1].get("message_id") if messages else None
+        return SendResult(external_message_id=str(message_id) if message_id else None)
+
     async def send_typing(self, recipient_id: str) -> None:
         """sendChatAction(typing) — "yozyapti..." (best-effort, ~5s ko'rinadi)."""
         if not self._token:

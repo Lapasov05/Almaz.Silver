@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import structlog
 
 from app.core.exceptions import AppError, NotFoundError
-from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming, strip_markdown
+from app.modules.inbox.channels.base import ChannelError, NormalizedIncoming
 from app.modules.inbox.channels.factory import build_channel_client
 from app.modules.inbox.models import (
     Conversation,
@@ -180,7 +180,7 @@ class InboxService:
         try:
             # Token DB (IntegrationConfig) → .env; markdown tozalanadi
             client = await build_channel_client(self.repo.db, conv.channel)
-            result = await client.send_text(conv.customer.external_id, strip_markdown(text))
+            result = await client.send_text(conv.customer.external_id, text)
             message.delivery_status = "sent"
             message.external_id = result.external_message_id
         except ChannelError as e:
@@ -229,12 +229,6 @@ class InboxService:
         from app.core.media_url import public_media_url
 
         image_url = public_media_url(image_url)
-        # Guardrail: rasm caption'i ham AI chiqishi — taqiqlangan atama (masalan mahsulot
-        # nomidagi "Diamond") to'g'ri atamaga almashadi (TZ 15). Matnli javob bilan bir xil qoida.
-        if caption:
-            from app.modules.ai.guardrail import enforce
-
-            caption = enforce(caption).text
         conv.last_message = caption or "[rasm]"
         conv.last_activity_at = _utcnow()
         message = Message(
@@ -257,6 +251,69 @@ class InboxService:
             logger.error(
                 "outbound_image_failed",
                 channel=conv.channel, conversation_id=str(conv.id), error=str(e),
+            )
+        await self.repo.db.commit()
+        await self.repo.db.refresh(message)
+        return message
+
+    async def send_media_group(
+        self,
+        conv: Conversation,
+        items: list[dict],
+        *,
+        tool_name: str,
+    ) -> Message:
+        from app.core.media_url import public_media_url
+
+        normalized = []
+        for position, item in enumerate(items, start=1):
+            normalized.append({**item, "position": position, "image_url": public_media_url(item["image_url"])})
+        conv.last_message = f"[{len(normalized)} ta rasm]"
+        conv.last_activity_at = _utcnow()
+        attachments = [
+            {
+                "type": "image",
+                "url": item["image_url"],
+                "position": item["position"],
+                "product_id": item.get("product_id"),
+                "variant_id": item.get("variant_id"),
+                "name": item.get("name"),
+            }
+            for item in normalized
+        ]
+        products = [
+            {
+                "position": item["position"],
+                "product_id": item["product_id"],
+                "variant_id": item["variant_id"],
+                "name": item["name"],
+            }
+            for item in normalized
+            if item.get("product_id") and item.get("variant_id") and item.get("name")
+        ]
+        message = Message(
+            conversation_id=conv.id,
+            direction="outgoing",
+            sender_type="ai",
+            content=None,
+            attachments=attachments,
+            tool_call={"name": tool_name, "products": products},
+            delivery_status="pending",
+        )
+        await self.repo.add(message)
+        await self.repo.db.commit()
+        try:
+            client = await build_channel_client(self.repo.db, conv.channel)
+            result = await client.send_images(conv.customer.external_id, normalized)
+            message.delivery_status = "sent"
+            message.external_id = result.external_message_id
+        except ChannelError as error:
+            message.delivery_status = "failed"
+            logger.error(
+                "outbound_media_group_failed",
+                channel=conv.channel,
+                conversation_id=str(conv.id),
+                error=str(error),
             )
         await self.repo.db.commit()
         await self.repo.db.refresh(message)

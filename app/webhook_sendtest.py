@@ -18,7 +18,7 @@ import os
 from sqlalchemy import select
 
 from app.core.database import SessionLocal
-from app.modules.inbox.channels.base import ChannelError, strip_markdown
+from app.modules.inbox.channels.base import ChannelError
 from app.modules.inbox.channels.factory import build_channel_client
 from app.modules.inbox.models import Conversation, Customer
 
@@ -43,7 +43,7 @@ async def latest_recipient(db, channel: str):
 async def send_one(db, channel: str, recipient: str) -> bool:
     client = await build_channel_client(db, channel)  # production yo'li (DB token)
     try:
-        res = await client.send_text(recipient, strip_markdown(TEXT))
+        res = await client.send_text(recipient, TEXT)
         print(f"  ✅ {channel}: YUBORILDI -> {recipient}  (msg_id={res.external_message_id})")
         return True
     except ChannelError as e:

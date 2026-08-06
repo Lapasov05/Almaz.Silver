@@ -27,7 +27,7 @@ redis==5.2.1
 httpx==0.28.1
 
 # --- AI / LLM (OpenAI function-calling, TZ 3/7) ---
-openai==1.59.6
+openai==2.53.0
 
 # --- Object storage (S3/MinIO) ---
 boto3==1.35.90

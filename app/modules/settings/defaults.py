@@ -22,9 +22,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "handoff_pause_minutes": 60,       # AI operatorga o'tkazgach VAQTINCHALIK pauza (doimiy o'chirmaydi)
 
     # --- AI / LLM (TZ 7.2) ---
-    "ai_temperature": 0.7,
-    "llm_model": "gpt-4o",
-    "prompt_version": 1,
+    "llm_model": "gpt-5-mini",
+    "prompt_version": 3,
     # Boshlang'ich salom (LLM ulanmagan bo'lsa ham birinchi xabarga javob) — INTEGRATIONS
     "ai_greeting_text": (
         "Assalomu alaykum! 😊 almazsilver'ga murojaatingiz uchun rahmat. "

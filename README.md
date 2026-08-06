@@ -15,12 +15,12 @@ sotuvga olib boradigan CRM platforma. Brend: **almazsilver** (Kumush 925 + rodiy
   (SKU → IG shortcode → tsvector GIN), pgvector semantik qidiruv (hnsw), IG shortcode mapping.
 - **Faza 2:** `customer/conversation/message` + IG/TG webhook (imzo tekshiruvi), inbox CRM API
   (list/thread/send/transfer/assign), 15-daqiqa AI pauzasi, Celery inbound (AI ilmog'i).
-- **Faza 3:** AI agent — guardrail (serkon/Kumush 925/fixed narx), tool-calling (search/recommend/
-  details/stock/delivery/card/RAG/handoff), prompt/memory/state machine, `knowledge_base` (RAG).
+- **Faza 3:** AI agent — OpenAI Responses API, v3 system prompt, suhbat tarixi va strict function calling
+  (catalog/recommendation/details/availability/delivery/payment/RAG/order/handoff), `knowledge_base` (RAG).
 - **Faza 4:** `order/order_item/delivery/checkout_token` + reservation, checkout token sahifa
-  (one-time, hash, expiry), zona fixed narx; AI `create_order`/`request_location` tool'lari.
+  (one-time, hash, expiry), zona fixed narx; AI `create_order`/`request_delivery_location` functionlari.
 - **Faza 5:** `payment/payment_card` prepaid oqim — submit→owner botiga (✅/❌ tugma)→approve
-  (idempotent, stock--)/reject, chek MinIO'ga, AI `submit_payment`/`get_payment_card` tool'lari.
+  (idempotent, stock--)/reject, chek MinIO'ga, AI `submit_payment_receipt`/`get_payment_details` functionlari.
 - **Faza 6:** RBAC to'liq (custom rol, permission matritsa, cache invalidatsiya), `audit_log`
   (approve/rol/user), KPI dashboard, `notification` qaydi.
 - **Faza 7:** hardening — rate limit (Redis), token revocation (logout), prompt injection himoya,

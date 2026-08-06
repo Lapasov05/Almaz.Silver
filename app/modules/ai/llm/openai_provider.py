@@ -1,67 +1,85 @@
-"""OpenAI function-calling provayderi (TZ 3/7). Kalit bo'lganda ishlatiladi."""
+import copy
 import json
+from typing import Any
 
 from openai import AsyncOpenAI
 
-from app.core.config import get_settings
-from app.modules.ai.llm.base import LlmMessage, LlmResult, LlmToolCall
-
-settings = get_settings()
-
-
-def _to_openai_messages(messages: list[LlmMessage]) -> list[dict]:
-    out: list[dict] = []
-    for m in messages:
-        if m.role == "assistant" and m.tool_calls:
-            out.append(
-                {
-                    "role": "assistant",
-                    "content": m.content,
-                    "tool_calls": [
-                        {
-                            "id": tc.id,
-                            "type": "function",
-                            "function": {"name": tc.name, "arguments": json.dumps(tc.arguments)},
-                        }
-                        for tc in m.tool_calls
-                    ],
-                }
-            )
-        elif m.role == "tool":
-            out.append({"role": "tool", "tool_call_id": m.tool_call_id, "content": m.content or ""})
-        else:
-            out.append({"role": m.role, "content": m.content or ""})
-    return out
+from app.modules.ai.llm.base import LlmFunctionCall, LlmResponse
 
 
 class OpenAIProvider:
     def __init__(self, api_key: str, base_url: str = "") -> None:
-        kwargs: dict = {"api_key": api_key}
+        kwargs: dict[str, Any] = {"api_key": api_key}
         if base_url:
             kwargs["base_url"] = base_url
         self._client = AsyncOpenAI(**kwargs)
 
     async def complete(
         self,
-        messages: list[LlmMessage],
-        tools: list[dict],
+        instructions: str,
+        input_items: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
         *,
         model: str,
-        temperature: float,
-    ) -> LlmResult:
-        resp = await self._client.chat.completions.create(
+    ) -> LlmResponse:
+        response = await self._client.responses.create(
             model=model,
-            temperature=temperature,
-            messages=_to_openai_messages(messages),
-            tools=tools or None,
+            instructions=instructions,
+            input=input_items,
+            tools=[self._strict_tool(tool) for tool in tools],
+            parallel_tool_calls=False,
+            store=False,
         )
-        choice = resp.choices[0].message
-        tool_calls = [
-            LlmToolCall(
-                id=tc.id,
-                name=tc.function.name,
-                arguments=json.loads(tc.function.arguments or "{}"),
+        output_items = [item.model_dump(exclude_none=True) for item in response.output]
+        function_calls: list[LlmFunctionCall] = []
+        for item in response.output:
+            if getattr(item, "type", "") != "function_call":
+                continue
+            try:
+                arguments = json.loads(getattr(item, "arguments", "") or "{}")
+            except json.JSONDecodeError:
+                arguments = {}
+            function_calls.append(
+                LlmFunctionCall(
+                    call_id=getattr(item, "call_id", ""),
+                    name=getattr(item, "name", ""),
+                    arguments=arguments,
+                )
             )
-            for tc in (choice.tool_calls or [])
-        ]
-        return LlmResult(content=choice.content, tool_calls=tool_calls)
+        return LlmResponse(
+            content=(response.output_text or "").strip(),
+            function_calls=function_calls,
+            output_items=output_items,
+        )
+
+    def _strict_tool(self, tool: dict[str, Any]) -> dict[str, Any]:
+        source = copy.deepcopy(tool.get("function", tool))
+        parameters = source.get("parameters") or {"type": "object", "properties": {}}
+        self._strict_schema(parameters)
+        return {
+            "type": "function",
+            "name": source["name"],
+            "description": source.get("description", ""),
+            "parameters": parameters,
+            "strict": True,
+        }
+
+    def _strict_schema(self, schema: dict[str, Any]) -> None:
+        if schema.get("type") == "object":
+            properties = schema.setdefault("properties", {})
+            originally_required = set(schema.get("required") or [])
+            for name, value in properties.items():
+                if name not in originally_required:
+                    value_type = value.get("type")
+                    if isinstance(value_type, str):
+                        value["type"] = [value_type, "null"]
+                    enum = value.get("enum")
+                    if isinstance(enum, list) and None not in enum:
+                        enum.append(None)
+            schema["required"] = list(properties)
+            schema["additionalProperties"] = False
+            for value in properties.values():
+                self._strict_schema(value)
+        items = schema.get("items")
+        if isinstance(items, dict):
+            self._strict_schema(items)

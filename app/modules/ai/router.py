@@ -97,8 +97,8 @@ async def get_prompt(db: AsyncSession = Depends(get_db)) -> PromptOut:
     repo = SettingsRepository(db)
     version_setting = await repo.get("prompt_version")
     override_setting = await repo.get("system_prompt_override")
-    version = int(version_setting.value) if version_setting else 1
-    base = await get_ai_text(db, "ai_system_prompt")  # DB (registr) asosiy prompt
+    version = int(version_setting.value) if version_setting else 3
+    base = await get_ai_text(db, "ai_system_prompt_v3")
     override = override_setting.value if override_setting else None
     return PromptOut(prompt_version=version, system_prompt=build_system_prompt(version, base, override))
 

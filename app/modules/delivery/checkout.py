@@ -39,7 +39,7 @@ async def _send_payment_followup(db: AsyncSession, order) -> None:
     (mijoz 'yubordim' deyishini kutmaymiz). Best-effort — xatolik confirm'ni buzmaydi.
     """
     try:
-        from app.modules.inbox.models import AiState, Customer
+        from app.modules.inbox.models import Customer
         from app.modules.inbox.repository import InboxRepository
         from app.modules.inbox.service import InboxService
         from app.modules.payments.repository import PaymentRepository
@@ -74,7 +74,6 @@ async def _send_payment_followup(db: AsyncSession, order) -> None:
                 await get_ai_text(db, delivery_key),
                 ask,
             ]))
-            conv.ai_state = AiState.awaiting_payment.value
             await db.commit()
             return
 
@@ -91,7 +90,6 @@ async def _send_payment_followup(db: AsyncSession, order) -> None:
         else:
             lines.append(await get_ai_text(db, "ai_msg_location_confirmed_nocard", total=total))
         await inbox.ai_send(conv, "\n\n".join(lines))
-        conv.ai_state = AiState.awaiting_payment.value
         await db.commit()
     except Exception:  # noqa: BLE001 — follow-up confirm oqimini buzmasin
         logger.warning("lokatsiya follow-up yuborilmadi (order=%s)", getattr(order, "id", None), exc_info=True)

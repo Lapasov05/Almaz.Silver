@@ -1,9 +1,3 @@
-"""AI tool'lari (function-calling) — CRM ma'lumotiga grounding (TZ 7.4 / 7.6).
-
-Faza 3'da amalga oshirilgan (o'qish/tavsiya/RAG): search_product, get_product_details,
-check_stock, recommend, calc_delivery, get_payment_card, search_knowledge_base, handoff_to_operator.
-Buyurtma/lokatsiya/to'lov yaratuvchi tool'lar — Faza 4/5 (orders/delivery/payments).
-"""
 import uuid
 from dataclasses import dataclass
 from decimal import Decimal
@@ -15,7 +9,7 @@ from app.modules.ai.repository import KnowledgeRepository
 from app.modules.catalog.models import Product
 from app.modules.catalog.repository import CatalogRepository
 from app.modules.catalog.service import CatalogService
-from app.modules.inbox.models import AiState, Conversation
+from app.modules.inbox.models import Conversation
 from app.modules.settings.repository import SettingsRepository
 
 
@@ -30,10 +24,11 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "search_product",
+            "name": "search_catalog",
             "description": (
-                "Katalogdan mahsulot topish: matn, Instagram shortcode, va/yoki NARX (byudjet) bo'yicha. "
-                "Mijoz byudjet aytsa (masalan '300 ming atrofi') max_price/min_price bilan qidiring."
+                "Katalogdan real, zaxirada bor mahsulotlarni matn, Instagram shortcode yoki narx oralig'i "
+                "bo'yicha topadi. Natija products ichida product_id, default_variant_id, narx, xususiyatlar, "
+                "available va rasmlarni qaytaradi."
             ),
             "parameters": {
                 "type": "object",
@@ -50,7 +45,10 @@ TOOL_SPECS: list[dict] = [
         "type": "function",
         "function": {
             "name": "get_product_details",
-            "description": "Mahsulotning to'liq ma'lumoti: narx, material, tosh, variant/zaxira.",
+            "description": (
+                "Bitta mahsulotning aniq narxi, tavsifi, materiali, toshi, o'lchamlari, variantlari, "
+                "zaxirasi, qutilari, kafolati va xizmatlarini qaytaradi."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"product_id": {"type": "string"}},
@@ -61,8 +59,11 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "check_stock",
-            "description": "Variant zaxirasi: available = stock_qty - reserved_qty.",
+            "name": "check_availability",
+            "description": (
+                "Buyurtmadan oldin tanlangan variantning joriy zaxirasini tekshiradi. available musbat bo'lsa "
+                "variant buyurtmaga mavjud."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"variant_id": {"type": "string"}},
@@ -73,8 +74,11 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "recommend",
-            "description": "Faol mahsulotlardan tavsiya (upsell/cross-sell). Byudjet berilsa max_price bilan.",
+            "name": "recommend_products",
+            "description": (
+                "Aniq model aytilmagan sovg'a, uslub yoki umumiy ehtiyoj uchun zaxiradagi mahsulotlardan "
+                "2-5 ta tavsiya qaytaradi. Byudjet bo'lsa narx oralig'ini qo'llaydi."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -88,8 +92,8 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "calc_delivery",
-            "description": "Zona bo'yicha yetkazish narxi (fixed).",
+            "name": "get_delivery_options",
+            "description": "Toshkent yoki viloyat zonasi uchun amaldagi yetkazish narxini UZSda qaytaradi.",
             "parameters": {
                 "type": "object",
                 "properties": {"zone": {"type": "string", "enum": ["tashkent", "region"]}},
@@ -100,8 +104,8 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "get_payment_card",
-            "description": "Asosiy (primary) to'lov kartasi ma'lumoti.",
+            "name": "get_payment_details",
+            "description": "To'lov paytida amaldagi asosiy karta raqami va karta egasi nomini qaytaradi.",
             "parameters": {"type": "object", "properties": {}},
         },
     },
@@ -115,6 +119,22 @@ TOOL_SPECS: list[dict] = [
                 "properties": {"query": {"type": "string"}},
                 "required": ["query"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_store_info",
+            "description": "Do'kon manzili, ish vaqti, kelib olish imkoniyati va operator aloqa raqamini olish.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_customer_profile",
+            "description": "Joriy mijozning CRMda saqlangan ismi va telefonini olish.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
@@ -184,7 +204,7 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "request_location",
+            "name": "request_delivery_location",
             "description": (
                 "Buyurtma uchun bir martalik checkout (lokatsiya) linki generatsiya qilish. Mijoz link "
                 "orqali manzil yubormasa yoki qayta so'rasa — YANA chaqiring (yangi link/kod beriladi). "
@@ -252,7 +272,7 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "submit_receipt",
+            "name": "submit_payment_receipt",
             "description": (
                 "Mijoz TO'LOV CHEKINING RASMINI yuborganда uni to'lovga tasdiqlashga (operator/owner) "
                 "uzatadi. Chek rasmini mijozning oxirgi yuborgan rasmidan AVTOMATIK oladi — receipt_url "
@@ -273,16 +293,18 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "send_product_images",
             "description": (
-                "Tavsiya qilinayotgan mahsulot(lar) RASMLARINI mijozga yuboradi — mijoz nom bilan "
-                "tanimasligi mumkin, rasm bilan aniq tanlaydi. Mahsulotni tavsiya qilganda/gapirganda "
-                "ishlating. Har mahsulotning 1-rasmi yuboriladi (rasmi bo'lganlarniki)."
+                "Berilgan mahsulotlarning birinchi rasmlarini product_ids tartibida bitta carousel xabarda "
+                "yuboradi. Bir tavsiyada faqat bir marta chaqiring. Natijadagi position mijozning "
+                "'1-chisi', '2-chisi' kabi tanloviga mos keladi."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "product_ids": {
                         "type": "array", "items": {"type": "string"},
-                        "description": "Rasm yuboriladigan mahsulot id'lari (search/recommend natijasidan)",
+                        "description": "Rasm yuboriladigan mahsulot id'lari (search_catalog/recommend_products natijasidan)",
+                        "minItems": 1,
+                        "maxItems": 10,
                     }
                 },
                 "required": ["product_ids"],
@@ -294,10 +316,8 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "send_box_images",
             "description": (
-                "Rangli QUTILARNING (box) RASMLARINI mijozga yuboradi — mijoz 'quti rasmlarini yubor', "
-                "'qutilarni ko'rsat', 'rangli qutilar rasmi' desa ishlating. Har quti rasmi tagida rang "
-                "va narx (tekin/pulli) ketadi. Aniq mahsulot bo'lsa `product_id` bering (o'sha kategoriya "
-                "qutilari); mijoz UMUMIY so'rasa product_id'siz chaqiring. Rasmi bor qutilar yuboriladi."
+                "Rangli qutilarning rasmlarini bitta carousel xabarda yuboradi. Aniq mahsulot bo'lsa "
+                "product_id bering, umumiy so'rovda null bering. Bir javobda faqat bir marta chaqiring."
             ),
             "parameters": {
                 "type": "object",
@@ -323,7 +343,7 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "save_customer_name",
+            "name": "update_customer_profile",
             "description": (
                 "Mijozning ISM-FAMILIYASI va/yoki TELEFON raqamini saqlaydi — buyurtma rasmiylashtirish "
                 "uchun kerak (CRM'da 'Mijoz' o'rniga ismi ko'rinadi). Mijoz ismini yoki telefonini aytsa "
@@ -352,7 +372,7 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
-            "name": "handoff_to_operator",
+            "name": "transfer_to_operator",
             "description": "Suhbatni jonli operatorga o'tkazish (o'zi hal qila olmaganda).",
             "parameters": {
                 "type": "object",
@@ -748,7 +768,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
     db = ctx.db
     catalog = CatalogService(CatalogRepository(db))
 
-    if name == "search_product":
+    if name == "search_catalog":
         min_p, max_p = args.get("min_price"), args.get("max_price")
         sctx = await _sale_ctx(db)
         if min_p is not None or max_p is not None:  # byudjet bo'yicha (effective narx)
@@ -771,7 +791,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         try:
             product = await catalog.get_product(uuid.UUID(str(args.get("product_id"))))
         except (ValueError, TypeError):
-            return {"error": "product_id noto'g'ri — avval search_product bilan mahsulotni toping"}
+            return {"error": "product_id noto'g'ri — avval search_catalog bilan mahsulotni toping"}
         brief = _product_brief(product, await _sale_ctx(db))
         brief["description"] = product.description_uz
         brief["variants"] = [
@@ -814,7 +834,6 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         return {"boxes": boxes, "display": _format_boxes_line(boxes)}
 
     if name == "send_box_images":
-        from app.modules.ai.guardrail import enforce
         from app.modules.inbox.repository import InboxRepository
         from app.modules.inbox.service import InboxService
 
@@ -830,27 +849,33 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 boxes = await _boxes_for_product(db, product)
         if not boxes:
             boxes = await _all_boxes(db)
-        sent, skipped = 0, 0
+        items = []
+        skipped = 0
         for b in boxes:
             imgs = b.get("images") or []
             if not imgs:
-                skipped += 1  # rasmi yo'q quti — yuborilmaydi
+                skipped += 1
                 continue
             price = int(b.get("price") or 0)
             price_txt = "tekin" if b.get("free") else f"+{price:,} so'm".replace(",", " ")
-            # MUHIM (IG tartibi): avval RASM (captionsiz), keyin alohida matn (rang + narx)
-            await inbox.send_media(ctx.conversation, imgs[0], caption=None)
-            await inbox.ai_send(ctx.conversation, enforce(f"{b['color']} quti — {price_txt}").text)
-            sent += 1
-        return {"sent": sent, "skipped_no_image": skipped}
+            items.append({
+                "image_url": imgs[0],
+                "title": b["color"],
+                "subtitle": price_txt,
+                "name": b["color"],
+            })
+        if items:
+            await inbox.send_media_group(ctx.conversation, items, tool_name="send_box_images")
+        return {"sent": len(items), "skipped_no_image": skipped}
 
     if name == "send_product_images":
         from app.modules.inbox.repository import InboxRepository
         from app.modules.inbox.service import InboxService
 
         inbox = InboxService(InboxRepository(db))
-        sent, skipped = 0, 0
-        for pid in (args.get("product_ids") or [])[:8]:
+        items = []
+        skipped = 0
+        for pid in (args.get("product_ids") or [])[:10]:
             try:
                 product = await CatalogRepository(db).get_product(uuid.UUID(pid))
             except (ValueError, TypeError):
@@ -860,20 +885,44 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
                 continue
             img = next((m.image_url for m in product.media if m.image_url), None)
             if not img:
-                skipped += 1  # rasmi yo'q — yuborilmaydi
+                skipped += 1
                 continue
-            # MUHIM (Instagram tartibi): avval RASM (captionsiz), KEYIN alohida matn xabari.
-            # Caption bilan yuborilса IG matnni rasmdan OLDIN ko'rsatadi — shuning uchun ajratamiz:
-            # rasm → tagidan ma'lumot (nom, narx, material, tosh). Har mahsulot ketma-ket.
-            from app.modules.ai.guardrail import enforce
+            variants = [v for v in product.variants if v.is_active and v.deleted_at is None]
+            variant = variants[0] if variants else None
+            if variant is None:
+                skipped += 1
+                continue
+            details = [f"{int(product.effective_price):,} so'm".replace(",", " ")]
+            if product.material:
+                details.append(product.material.name_uz)
+            if product.stone:
+                details.append(product.stone.name_uz)
+            position = len(items) + 1
+            items.append({
+                "image_url": img,
+                "title": f"{position}. {product.name_uz}",
+                "subtitle": " · ".join(details),
+                "name": product.name_uz,
+                "product_id": str(product.id),
+                "variant_id": str(variant.id),
+            })
+        if items:
+            await inbox.send_media_group(ctx.conversation, items, tool_name="send_product_images")
+        return {
+            "sent": len(items),
+            "skipped_no_image": skipped,
+            "products": [
+                {
+                    "position": index,
+                    "product_id": item["product_id"],
+                    "variant_id": item["variant_id"],
+                    "name": item["name"],
+                }
+                for index, item in enumerate(items, start=1)
+            ],
+        }
 
-            box_line = _format_boxes_line(await _boxes_for_product(db, product))  # quti variantlari (narx bilan)
-            await inbox.send_media(ctx.conversation, img, caption=None)
-            await inbox.ai_send(ctx.conversation, enforce(_image_caption(product, box_line)).text)
-            sent += 1
-        return {"sent": sent, "skipped_no_image": skipped}
-
-    if name == "save_customer_name":
+    if name == "update_customer_profile":
         from app.modules.inbox.models import Customer
 
         nm = (args.get("name") or "").strip()
@@ -899,7 +948,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         brief["boxes"] = await _boxes_for_product(db, product)
         return brief
 
-    if name == "check_stock":
+    if name == "check_availability":
         variant = await CatalogRepository(db).get_variant(uuid.UUID(args["variant_id"]))
         if variant is None:
             return {"error": "variant topilmadi"}
@@ -910,26 +959,34 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             "available": max(variant.available, 0),
         }
 
-    if name == "recommend":
+    if name == "recommend_products":
         from app.core.pagination import PageParams
 
         min_p, max_p = args.get("min_price"), args.get("max_price")
         products, _ = await catalog.list_products(
             pp=PageParams(limit=5, offset=0), status="active",
+            q=args.get("context"),
             min_price=Decimal(str(min_p)) if min_p is not None else None,
             max_price=Decimal(str(max_p)) if max_p is not None else None,
             in_stock=True,  # faqat zaxirada bor mahsulotlar tavsiya qilinadi
         )
+        if not products and args.get("context"):
+            products, _ = await catalog.list_products(
+                pp=PageParams(limit=5, offset=0), status="active",
+                min_price=Decimal(str(min_p)) if min_p is not None else None,
+                max_price=Decimal(str(max_p)) if max_p is not None else None,
+                in_stock=True,
+            )
         sctx = await _sale_ctx(db)
-        return {"products": [_product_brief(p, sctx) for p in products]}
+        return {"context": args.get("context"), "products": [_product_brief(p, sctx) for p in products]}
 
-    if name == "calc_delivery":
+    if name == "get_delivery_options":
         zone = args.get("zone")
         key = "delivery_fee_tashkent" if zone == "tashkent" else "delivery_fee_region"
         fee = await _get_setting(db, key, 0)
         return {"zone": zone, "fee": fee, "currency": "UZS"}
 
-    if name == "get_payment_card":
+    if name == "get_payment_details":
         from app.modules.payments.repository import PaymentRepository
 
         card = await PaymentRepository(db).get_default_card()
@@ -944,6 +1001,29 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         entries = await KnowledgeRepository(db).search_text(args["query"], limit=3)
         return {"results": [{"type": e.type, "title": e.title, "content": e.content} for e in entries]}
 
+    if name == "get_store_info":
+        return {
+            "offline_store": bool(await _get_setting(db, "store_offline", True)),
+            "pickup_enabled": bool(await _get_setting(db, "store_pickup_enabled", True)),
+            "address": await _get_setting(db, "store_address", ""),
+            "work_hours": await _get_setting(db, "store_work_hours", ""),
+            "operator_phone": await _get_setting(db, "operator_phone", ""),
+            "complaint_phone": await _get_setting(db, "complaint_phone", ""),
+        }
+
+    if name == "get_customer_profile":
+        from app.modules.inbox.models import Customer
+
+        customer = await db.get(Customer, ctx.conversation.customer_id)
+        if customer is None:
+            return {"found": False}
+        return {
+            "found": True,
+            "full_name": customer.full_name,
+            "phone": customer.phone,
+            "language": customer.language,
+        }
+
     if name == "create_order":
         from app.modules.orders.repository import OrdersRepository
         from app.modules.orders.schemas import OrderItemCreate
@@ -955,7 +1035,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             vid = await _resolve_variant_id(repo, catalog, it.get("variant_id"))
             if vid is None:
                 return {"error": f"Mahsulot/variant topilmadi: {it.get('variant_id')!r}. "
-                                 f"Avval search_product bilan toping va default_variant_id ni bering."}
+                                 f"Avval search_catalog bilan toping va default_variant_id ni bering."}
             # Box: UUID yoki RANG NOMI ("qizil") — ikkalasini ham hal qilamiz (AI nom yuborsa loop bo'lmasin)
             box_id = None
             if it.get("box_id"):
@@ -1005,7 +1085,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             "grand_total": _num(order.grand_total),
         }
 
-    if name == "request_location":
+    if name == "request_delivery_location":
         from app.modules.delivery.service import DeliveryService
 
         # order_id berilmasa/xato bo'lsa faol buyurtmani olamiz (AI tool natijasini qadamlararo
@@ -1021,7 +1101,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         from app.modules.delivery.service import DeliveryService
 
         if not bool(await _get_setting(db, "accept_text_address", True)):
-            return {"error": "Matnli manzil o'chirilgan — request_location bilan xarita linkini bering."}
+            return {"error": "Matnli manzil o'chirilgan — request_delivery_location bilan xarita linkini bering."}
         order = await _resolve_order(db, ctx, args.get("order_id"))
         if order is None:
             return {"error": "Faol buyurtma topilmadi — avval create_order chaqiring."}
@@ -1090,7 +1170,7 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             "grand_total": _num(order.grand_total),
         }
 
-    if name == "submit_receipt":
+    if name == "submit_payment_receipt":
         from app.modules.inbox.models import Customer
         from app.modules.payments.service import PaymentService
 
@@ -1123,13 +1203,10 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         return {"order_no": order.order_no, "status": "completed",
                 "note": "Buyurtma yakunlandi — mijozga minnatdorchilik bildir."}
 
-    if name == "handoff_to_operator":
-        # AI VAQTINCHALIK to'xtaydi (pauza) — operator qo'lga oladi. DOIMIY O'CHIRILMAYDI: pauza
-        # tugagach (yoki operator ishlagach) AI qayta ishlaydi. Operator inbox'da handed_off bo'yicha ko'radi.
+    if name == "transfer_to_operator":
         from datetime import datetime, timedelta, timezone
 
         minutes = int(await _get_setting(db, "handoff_pause_minutes", 60) or 60)
-        ctx.conversation.ai_state = AiState.handed_off.value
         ctx.conversation.ai_paused_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
         return {"status": "handed_off", "reason": args.get("reason")}
 

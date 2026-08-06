@@ -4,11 +4,11 @@ Tekshiradi (mijoz aytgan ketma-ketlik bo'yicha):
   1) Rasm URL normalizatsiyasi (localhost → public base) — send_media saqlagan attachment.
   2) send_product_images — har mahsulot rasmi + boyitilgan izoh (nom/narx/material/tosh).
   3) create_order → buyurtma + zaxira.
-  4) request_location → checkout link; qayta chaqirilsa YANGI token (regeneratsiya).
+  4) request_delivery_location → checkout link; qayta chaqirilsa YANGI token (regeneratsiya).
   5) resolve_checkout → zona (Toshkent) + delivery_fee + grand_total.
   6) get_order_summary → items_total + delivery + jami + mijoz ma'lumotlari.
-  7) get_payment_card → asosiy karta.
-  8) submit_receipt → mijozning oxirgi rasmi → chek → to'lovga uzatiladi (order → payment_review).
+  7) get_payment_details → asosiy karta.
+  8) submit_payment_receipt → mijozning oxirgi rasmi → chek → to'lovga uzatiladi (order → payment_review).
   9) approve → order confirmed + mijozga xabar.
  10) get_order_status → status_text.
 
@@ -78,22 +78,24 @@ async def main():
         uzuk_pid = str(uzuk.id)
         uzuk_vid = str([v for v in uzuk.variants][0].id)
 
-        print("\n── 1-2) send_product_images (rasm + boyitilgan izoh + URL normalizatsiya) ──")
+        print("\n── 1-2) send_product_images (bitta carousel + tartib + URL normalizatsiya) ──")
         r = await dispatch("send_product_images", {"product_ids": [uzuk_pid, str(braslet.id)]}, ctx)
         check(r.get("sent") == 2, f"2 ta rasm yuborildi (natija: {r})")
-        # Saqlangan chiquvchi media xabarlari
         msgs = (await db.execute(
             Message.__table__.select().where(Message.conversation_id == conv.id)
         )).all()
         media_msgs = [m for m in msgs if m.attachments]
-        check(len(media_msgs) == 2, f"2 ta media xabar saqlandi ({len(media_msgs)})")
+        check(len(media_msgs) == 1, f"1 ta carousel xabar saqlandi ({len(media_msgs)})")
+        check(len(media_msgs[0].attachments) == 2, "Carousel ichida 2 ta rasm bor")
         url0 = media_msgs[0].attachments[0]["url"]
         check(url0.startswith("https://shop.example.uz/uploads/"),
               f"Rasm URL public bazaga normalizatsiya qilindi: {url0}")
-        # Ma'lumot endi ALOHIDA matn xabarida (rasmdan keyin) — caption emas
-        text_msgs = [m for m in msgs if not m.attachments and m.direction == "outgoing"]
-        info_ok = any("Narx:" in (m.content or "") and "so'm" in (m.content or "") for m in text_msgs)
-        check(info_ok, "Ma'lumot rasmdan KEYIN alohida matn xabarida (nom+narx)")
+        products = (media_msgs[0].tool_call or {}).get("products") or []
+        check(
+            len(products) == 2 and products[0]["position"] == 1
+            and products[0]["product_id"] == uzuk_pid,
+            "Carousel tartibi va 1-mahsulot metadata'da saqlandi",
+        )
 
         print("\n── 3) create_order (uzuk + o'lcham) ──")
         r = await dispatch("create_order", {"items": [{"variant_id": uzuk_vid, "quantity": 1, "ring_size": "18"}]}, ctx)
@@ -101,13 +103,13 @@ async def main():
         check(oid and r.get("status") == "pending", f"Buyurtma yaratildi: {r.get('order_no')} / {r.get('status')}")
         check(float(r.get("items_total")) == 300000.0, f"items_total=300000 ({r.get('items_total')})")
 
-        print("\n── 4) MIJOZ MA'LUMOTLARI: save_customer_name (ism + telefon) ──")
-        r = await dispatch("save_customer_name", {"name": "Ali Valiyev", "phone": "+998901234567"}, ctx)
+        print("\n── 4) MIJOZ MA'LUMOTLARI: update_customer_profile (ism + telefon) ──")
+        r = await dispatch("update_customer_profile", {"name": "Ali Valiyev", "phone": "+998901234567"}, ctx)
         check(r.get("saved") and r.get("phone") == "+998901234567", f"Ism+telefon saqlandi: {r}")
 
-        print("\n── 5) request_location (+ regeneratsiya: qayta chaqirsa yangi token) ──")
-        r1 = await dispatch("request_location", {"order_id": oid}, ctx)
-        r2 = await dispatch("request_location", {"order_id": oid}, ctx)
+        print("\n── 5) request_delivery_location (+ regeneratsiya: qayta chaqirsa yangi token) ──")
+        r1 = await dispatch("request_delivery_location", {"order_id": oid}, ctx)
+        r2 = await dispatch("request_delivery_location", {"order_id": oid}, ctx)
         check(r1.get("checkout_url") and r2.get("checkout_url"), "Checkout link(lar) generatsiya qilindi")
         check(r1["checkout_url"] != r2["checkout_url"], "Qayta so'ralganда YANGI (boshqa) token berildi")
 
@@ -129,11 +131,11 @@ async def main():
         check(r["customer_name"] == "Ali Valiyev" and r["customer_phone"] == "+998901234567"
               and r["has_location"], "Mijoz ismi/telefon/manzil xulosaда bor")
 
-        print("\n── 7b) get_payment_card (asosiy karta) ──")
-        r = await dispatch("get_payment_card", {}, ctx)
+        print("\n── 7b) get_payment_details (asosiy karta) ──")
+        r = await dispatch("get_payment_details", {}, ctx)
         check(r.get("card_number_masked") == "8600 **** **** 1234", f"Asosiy karta: {r}")
 
-        print("\n── 8) submit_receipt (mijoz chek rasmini yuboradi) ──")
+        print("\n── 8) submit_payment_receipt (mijoz chek rasmini yuboradi) ──")
         # Mijozdan kelgan rasm xabari (IG uslubida url attachment)
         img_msg = Message(conversation_id=conv.id, direction="incoming", sender_type="customer",
                           content=None, attachments=[{"type": "image", "url": "http://x/receipt.jpg"}],
@@ -146,7 +148,7 @@ async def main():
             return b"\xff\xd8\xff\xe0FAKEJPEG", "jpg"
         ai_tools._download_attachment = fake_dl
 
-        r = await dispatch("submit_receipt", {}, ctx)
+        r = await dispatch("submit_payment_receipt", {}, ctx)
         check(r.get("status") == "pending" and r.get("payment_id"), f"Chek to'lovga uzatildi: {r}")
         order = await OrdersRepository(db).get(uuid.UUID(oid))
         check(order.status == "payment_review", f"Order → payment_review ({order.status})")

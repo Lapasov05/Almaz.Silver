@@ -1,66 +1,40 @@
-"""Kanal adapterlari uchun umumiy tiplar va interfeys."""
-import re
 from dataclasses import dataclass, field
 from typing import Protocol
 
-# LLM javobidagi markdown belgilarini oddiy matnга aylantirish (TG/IG render qilmaydi)
-_MD_PATTERNS = [
-    (re.compile(r"\*\*(.+?)\*\*", re.DOTALL), r"\1"),   # **bold**
-    (re.compile(r"__(.+?)__", re.DOTALL), r"\1"),       # __bold__
-    (re.compile(r"`{1,3}([^`]+)`{1,3}"), r"\1"),        # `code`
-    (re.compile(r"^#{1,6}\s*", re.MULTILINE), ""),      # # sarlavha
-    (re.compile(r"^\s*[-*]\s+", re.MULTILINE), "• "),   # ro'yxat -> •
-]
-
-
-def strip_markdown(text: str | None) -> str:
-    """Chiquvchi xabardan markdown belgilarini olib tashlaydi (bitta markazlashgan joy)."""
-    if not text:
-        return ""
-    for pattern, repl in _MD_PATTERNS:
-        text = pattern.sub(repl, text)
-    return text
-
 
 def split_message(text: str | None, limit: int) -> list[str]:
-    """Uzun matnni kanal limiti (masalan Instagram ~1000) bo'yicha bo'laklarga bo'ladi.
-
-    Qatorlar chegarasida bo'ladi; juda uzun qator qattiq kesiladi. Bo'sh matn -> [].
-    """
     text = (text or "").strip()
     if not text:
         return []
     if len(text) <= limit:
         return [text]
     parts: list[str] = []
-    cur = ""
+    current = ""
     for line in text.split("\n"):
-        while len(line) > limit:  # juda uzun bitta qator
-            if cur:
-                parts.append(cur)
-                cur = ""
+        while len(line) > limit:
+            if current:
+                parts.append(current)
+                current = ""
             parts.append(line[:limit])
             line = line[limit:]
-        if len(cur) + len(line) + 1 > limit:
-            if cur:
-                parts.append(cur)
-            cur = line
+        if len(current) + len(line) + 1 > limit:
+            if current:
+                parts.append(current)
+            current = line
         else:
-            cur = (cur + "\n" + line) if cur else line
-    if cur:
-        parts.append(cur)
+            current = f"{current}\n{line}" if current else line
+    if current:
+        parts.append(current)
     return parts
 
 
 class ChannelError(Exception):
-    """Kanal (IG/TG) bilan ishlashда yuzaga kelgan xato (config yo'q, API xatosi)."""
+    pass
 
 
 @dataclass
 class NormalizedIncoming:
-    """Kanaldan kelgan xabarning yagona (normallashtirilgan) ko'rinishi."""
-
-    channel: str  # "telegram" | "instagram"
+    channel: str
     external_user_id: str
     text: str | None = None
     username: str | None = None
@@ -75,14 +49,10 @@ class SendResult:
 
 
 class ChannelClient(Protocol):
-    """Outbound xabar yuborish interfeysi (Telegram/Instagram amalga oshiradi)."""
-
     async def send_text(self, recipient_id: str, text: str) -> SendResult: ...
 
-    async def send_image(self, recipient_id: str, image_url: str, caption: str | None = None) -> SendResult:
-        """Rasm (URL) yuboradi — ixtiyoriy izoh (caption) bilan."""
-        ...
+    async def send_image(self, recipient_id: str, image_url: str, caption: str | None = None) -> SendResult: ...
 
-    async def send_typing(self, recipient_id: str) -> None:
-        """"Yozyapti..." indikatorini yuboradi (best-effort — xato bo'lsa jim)."""
-        ...
+    async def send_images(self, recipient_id: str, items: list[dict]) -> SendResult: ...
+
+    async def send_typing(self, recipient_id: str) -> None: ...

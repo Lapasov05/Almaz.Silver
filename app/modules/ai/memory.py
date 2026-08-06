@@ -1,36 +1,50 @@
-"""Agent xotirasi (TZ 7.3) — qisqa muddat (oxirgi N xabar) + uzoq muddat (mijoz profili)."""
+import json
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.ai.guardrail import sanitize_user_input
-from app.modules.ai.llm.base import LlmMessage
-from app.modules.inbox.models import Conversation, Customer
+from app.modules.inbox.models import Conversation
 from app.modules.inbox.repository import InboxRepository
 
 
-async def build_messages(
+async def build_conversation_input(
     db: AsyncSession,
     conversation: Conversation,
-    customer: Customer,
-    system_prompt: str,
-    memory_limit: int,
-) -> list[LlmMessage]:
-    """LLM'ga uzatiladigan xabarlar ro'yxatini yig'adi (system + profil + tarix)."""
-    messages: list[LlmMessage] = [LlmMessage(role="system", content=system_prompt)]
-
-    # Uzoq muddat: mijoz profili (takroriy so'ramaslik uchun)
-    profile = [f"kanal: {conversation.channel}", f"til: {customer.language}"]
-    if customer.full_name:
-        profile.append(f"ism: {customer.full_name}")
-    if customer.username:
-        profile.append(f"username: @{customer.username}")
-    messages.append(LlmMessage(role="system", content="Mijoz profili — " + ", ".join(profile)))
-
-    # Qisqa muddat: oxirgi N xabar (xronologik)
-    history = await InboxRepository(db).list_recent_messages(conversation.id, memory_limit)
-    for m in history:
-        if m.sender_type == "customer":
-            messages.append(LlmMessage(role="user", content=sanitize_user_input(m.content)))
-        elif m.sender_type in ("ai", "operator") and m.content:
-            messages.append(LlmMessage(role="assistant", content=m.content))
-        # system xabarlar (transfer va h.k.) LLM'ga uzatilmaydi
-    return messages
+    message_limit: int,
+) -> list[dict]:
+    result: list[dict] = []
+    history = await InboxRepository(db).list_recent_messages(conversation.id, message_limit)
+    for message in history:
+        if message.sender_type == "customer":
+            content: list[dict] = []
+            if message.content:
+                content.append({"type": "input_text", "text": message.content})
+            for attachment in message.attachments or []:
+                if not isinstance(attachment, dict):
+                    continue
+                image_url = attachment.get("url")
+                if attachment.get("type") in {"image", "photo"} and image_url:
+                    content.append({"type": "input_image", "image_url": image_url})
+                elif attachment.get("type") in {"image", "photo"}:
+                    content.append({"type": "input_text", "text": "[Mijoz rasm yubordi]"})
+            if content:
+                result.append({"role": "user", "content": content})
+            continue
+        if message.sender_type not in {"ai", "operator"}:
+            continue
+        text = message.content or ""
+        metadata = message.tool_call or {}
+        products = metadata.get("products") if metadata.get("name") == "send_product_images" else None
+        if products:
+            ordered = "; ".join(
+                f"{item['position']}-mahsulot: {item['name']} "
+                f"(product_id={item['product_id']}, variant_id={item['variant_id']})"
+                for item in products
+            )
+            text = f"{text}\n[Oldingi carousel tartibi: {ordered}]".strip()
+        calls = metadata.get("calls")
+        if calls:
+            serialized = json.dumps(calls, ensure_ascii=False, default=str)
+            text = f"{text}\n[Oldingi function calllar: {serialized[:6000]}]".strip()
+        if text:
+            result.append({"role": "assistant", "content": text})
+    return result

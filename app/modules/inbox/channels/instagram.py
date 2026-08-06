@@ -117,6 +117,37 @@ class InstagramClient:
                                   json={"recipient": {"id": recipient_id}, "message": {"text": caption}})
         return SendResult(external_message_id=result_id)
 
+    async def send_images(self, recipient_id: str, items: list[dict]) -> SendResult:
+        if not self._token:
+            raise ChannelError("Instagram access_token sozlanmagan")
+        elements = []
+        for index, item in enumerate(items[:10], start=1):
+            elements.append({
+                "title": str(item.get("title") or f"{index}-mahsulot")[:80],
+                "image_url": item["image_url"],
+                "subtitle": str(item.get("subtitle") or "")[:80],
+            })
+        if not elements:
+            raise ChannelError("Instagram carousel uchun rasm topilmadi")
+        url = f"{self._base}/{self._version}/{self._sender}/messages"
+        body = {
+            "recipient": {"id": recipient_id},
+            "message": {
+                "attachment": {
+                    "type": "template",
+                    "payload": {"template_type": "generic", "elements": elements},
+                }
+            },
+        }
+        async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+            response = await client.post(url, params={"access_token": self._token}, json=body)
+        if response.status_code >= 400:
+            raise ChannelError(f"Instagram carousel xato: {response.status_code} {response.text[:200]}")
+        data = response.json()
+        if isinstance(data, dict) and data.get("error"):
+            raise ChannelError(f"Instagram carousel rad etildi: {str(data['error'])[:200]}")
+        return SendResult(external_message_id=data.get("message_id"))
+
     async def send_typing(self, recipient_id: str) -> None:
         """sender_action=typing_on — "yozyapti..." (best-effort)."""
         if not self._token:

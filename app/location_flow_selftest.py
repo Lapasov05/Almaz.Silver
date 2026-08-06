@@ -2,7 +2,7 @@
 
 Tekshiradi:
   1) create_order SUPERSEDE — yangi order oldingi faol orderni bekor qiladi (bitta faol order).
-  2) request_location LINK formati: {frontend_map_url}/map/{token}.
+  2) request_delivery_location LINK formati: {frontend_map_url}/map/{token}.
   3) resolve_checkout TOSHKENT (lat/lng Toshkent) → type=Toshkent, 50k, customer_location saqlanadi.
   4) resolve_checkout BTS (Samarqand lat/lng) → type=BTS, 30k, ENG YAQIN filial (Samarqand) biriktiriladi.
   5) get_order_summary → location_type + bts_branch.
@@ -70,8 +70,8 @@ async def main():
         r3 = await dispatch("create_order", {"items": [{"variant_id": v2, "quantity": 1, "ring_size": "19"}]}, ctx)
         check(r3.get("already_exists") and r3["order_id"] == oid, "Aynan shu mahsulot qayta → dubl yo'q")
 
-        print("\n── 2) request_location LINK formati ──")
-        rl = await dispatch("request_location", {}, ctx)  # order_id'siz — faol orderni topadi
+        print("\n── 2) request_delivery_location LINK formati ──")
+        rl = await dispatch("request_delivery_location", {}, ctx)  # order_id'siz — faol orderni topadi
         url = rl.get("checkout_url", "")
         check(url.startswith(f"{settings.frontend_map_url.rstrip('/')}/map/"), f"Link /map/ formatida: {url}")
 

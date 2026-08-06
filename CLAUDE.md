@@ -96,21 +96,19 @@ tosh — **serkon (CZ)**. Operator faqat tasdiqlangan buyurtmani jo'natadi.
 
 ### ✅ Faza 3 — AI Agent (yadro) (TUGADI)
 - **`ai` moduli:** `knowledge_base` modeli + migratsiya `0004_knowledge` (tsvector GIN + pgvector hnsw). Seed: 6 boshlang'ich KB yozuvi.
-- **Guardrail (TZ 15, KRITIK)** — `ai/guardrail.py`: har AI javobi yuborishdan oldin tekshiriladi. "olmos/diamond/brilliant/tabiiy tosh"→"serkon toshi", "oltin/gold"→"Kumush 925 + rodiy". Buzilish qayd etiladi. `sanitize_user_input` (prompt injection).
-- **Prompt Manager** — `ai/prompts.py`: versiyalangan system prompt (`settings.prompt_version` + `system_prompt_override`), rol/til/guardrail qoidalari.
-- **Memory (TZ 7.3)** — `ai/memory.py`: qisqa muddat (oxirgi N xabar) + uzoq muddat (mijoz profili).
-- **State machine (TZ 7.1)** — `ai/state_machine.py`: greeting→...→closed o'tishlar, tool'lardan keyingi holat.
-- **Tool'lar (TZ 7.4)** — `ai/tools.py`: `search_product`, `get_product_details`, `check_stock`, `recommend`, `calc_delivery`, `get_payment_card`, `search_knowledge_base` (RAG), `handoff_to_operator`. CRM ma'lumotiga grounding.
-- **LLM abstraksiyasi** — `ai/llm/`: `base` (Protocol) · `openai_provider` (real, TZ 3) · `fake_provider` (test) · `factory`. Provayder swappable.
-- **Agent orkestratsiya** — `ai/agent.py`: gating (ai_enabled/paused/closed) → memory → prompt → tool-calling sikli → guardrail → `ai_send` → state. Worker `inbox.process_incoming` shu agentni ishga tushiradi (`task_session`).
+- **Prompt Manager** — `ai/prompts.py`: versiyalangan system prompt (`ai_system_prompt_v3`) va biznes qoidalari.
+- **Conversation input (TZ 7.3)** — `ai/memory.py`: oxirgi N xabar, mijoz yuborgan media va oldingi carousel tartibi.
+- **Tool'lar (TZ 7.4)** — `ai/tools.py`: katalog, mijoz, do'kon, yetkazib berish, buyurtma, to'lov, RAG va handoff strict function call'lari.
+- **LLM abstraksiyasi** — `ai/llm/`: OpenAI Responses API, strict schema va barcha output item'larini tool sikliga qaytarish.
+- **Agent orkestratsiya** — `ai/agent.py`: gating → client conversation → system prompt → function calling sikli → `ai_send`. Worker `inbox.process_incoming` shu agentni ishga tushiradi (`task_session`).
 - **CRM API** — `ai/router.py`: KB CRUD, `GET /ai/prompt`, `POST /ai/conversations/{id}/respond` (qo'lda trigger).
-- **Tayyor mezoni:** AI mustaqil tovar tavsiya qiladi, guardrail buziladigan javob chiqmaydi. ✔ (FakeProvider bilan uchdan-uchiga smoke)
+- **Carousel:** Instagram mahsulot rasmlari bitta generic-template xabarda tartib bilan yuboriladi; shu tartib conversation input'da saqlanadi.
 
 **Faza 3 qarorlari:**
 - **LLM = OpenAI** (TZ 3-bo'lim). `LLM_PROVIDER` (openai|fake|none); kalit yo'q → AI **jim** turadi (fabrikatsiya yo'q). Provayder abstraksiyasi tufayli Claude/lokal model qo'shsa bo'ladi (TZ 19 PII eslatmasi).
-- **Test LLM'siz:** guardrail/tool/memory/RAG/state to'liq testlanadi; agent sikli `FakeProvider` (skriptli) bilan.
+- **Test LLM'siz:** tool, conversation input, RAG va agent sikli `FakeProvider` bilan testlanadi.
 - **Embedding _generatsiyasi_ hali yo'q** — KB/media embedding ustunlari bor, hnsw indeks bor; embedding to'ldirish OpenAI embeddings bilan keyin (RAG hozir tsvector orqali).
-- **Buyurtma/lokatsiya/to'lov tool'lari (create_order/request_location/submit_payment)** ataylab REGISTRATSIYA QILINMADI — orders/delivery/payments modullari Faza 4/5. Agent hozir tavsiya + savol bosqichigacha olib boradi.
+- **Buyurtma/lokatsiya/to'lov functionlari:** `create_order`, `request_delivery_location`, `submit_payment_receipt` va tegishli tekshiruvlar registratsiya qilingan.
 - AI javobi `ai_paused_until` QO'YMAYDI (faqat operator qo'yadi).
 
 ### ✅ Faza 4 — Buyurtma + lokatsiya + yetkazish (TUGADI)
@@ -121,7 +119,7 @@ tosh — **serkon (CZ)**. Operator faqat tasdiqlangan buyurtmani jo'natadi.
 - **Buyurtma invariantlari (TZ 18):** `order_item.ring_size` (o'lcham order'da), `bonus_snapshot` (global bonus nusxasi), `unit_price` (yaratish vaqtidagi fixed narx). `order_no` unikal generatsiya.
 - **Checkout token (TZ 11/15):** `POST /delivery/orders/{id}/checkout-link` → bir martalik link; public `GET/POST /checkout/{token}`. Token **hash saqlanadi**, muddatli (24h), **one-time/replay himoya**, expiry tekshiruvi.
 - **Yetkazish (TZ 11):** zona fixed narx (Toshkent 50k→provider yandex / viloyat 30k→bts). Lokatsiya resolve → `order.delivery_fee`+`grand_total`, status `pending→waiting_payment`. Yandex API yo'q.
-- **AI tool'lari ulandi:** `create_order`, `request_location` (Faza 3'da kechiktirilgan) → agent buyurtma yaratadi va checkout link yuboradi; state machine `ordering`/`awaiting_location`.
+- **AI functionlari ulandi:** `create_order`, `request_delivery_location` → agent buyurtma yaratadi va checkout link yuboradi.
 - **Tayyor mezoni:** AI buyurtma yaratadi, lokatsiya token bilan bog'lanadi, narx to'g'ri. ✔ (jonli Postgres smoke: reservation, checkout create/resolve/replay/expiry, cancel, AI buyurtma)
 
 **Faza 4 qarorlari:**
@@ -137,7 +135,7 @@ tosh — **serkon (CZ)**. Operator faqat tasdiqlangan buyurtmani jo'natadi.
 - **Reject:** `reject_reason_required` (settings) tekshiruvi, **`reserved_qty--`** (band bo'shaydi, TZ 10), mijozga xabar.
 - **Owner bot oqimi (TZ 12):** `NotificationService` chekni owner/manager Telegram chatiga **✅/❌ inline tugmalar** bilan yuboradi; `callback_query` webhook'da qayta ishlanadi (`handle_payment_callback`).
 - **Object storage (MinIO):** `ReceiptStorage` (boto3) — `POST /payments/receipts` chekni yuklaydi.
-- **Payment card:** CRUD + `is_primary` (bitta). AI `get_payment_card` endi jadvaldan o'qiydi; `submit_payment` AI tool ulandi (state → `payment_review`).
+- **Payment card:** CRUD + `is_primary` (bitta). AI `get_payment_details` jadvaldan o'qiydi; `submit_payment_receipt` chekni tekshiruvga uzatadi.
 - **Tayyor mezoni:** chek owner botiga boradi, tasdiq → buyurtma operatorga tushadi. ✔ (jonli Postgres smoke: submit/approve idempotent+stock/reject/callback/AI)
 
 **Faza 5 qarorlari:**
