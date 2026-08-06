@@ -106,13 +106,18 @@ class InboxRepository:
         return await paginate(self.db, stmt, [Message.created_at.asc()], pp)
 
     async def list_recent_messages(self, conversation_id: uuid.UUID, limit: int) -> list[Message]:
-        """Oxirgi N xabar (AI xotirasi uchun), xronologik tartibда (TZ 7.3)."""
-        res = await self.db.execute(
+        """Oxirgi N xabar (AI xotirasi uchun), xronologik tartibда (TZ 7.3).
+
+        `limit` 0 yoki manfiy bo'lsa — BUTUN suhbat qaytadi (cheklovsiz).
+        """
+        stmt = (
             select(Message)
             .where(Message.conversation_id == conversation_id)
             .order_by(Message.created_at.desc())
-            .limit(limit)
         )
+        if limit and limit > 0:
+            stmt = stmt.limit(limit)
+        res = await self.db.execute(stmt)
         return list(reversed(res.scalars().all()))
 
     async def mark_incoming_read(self, conversation_id: uuid.UUID) -> None:
