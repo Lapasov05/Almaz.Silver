@@ -188,6 +188,25 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "list_category_products",
+            "description": (
+                "Bitta kategoriyadagi zaxirada BOR barcha mahsulotlarni qaytaradi (matn qidiruvisiz). "
+                "Mijoz mahsulot TURINI so'raganda ('qanaqa uzuklar bor', 'brasletlaringizni ko'rsat', "
+                "'hammasini ko'rsat') shu tool ishlatiladi — search_catalog emas. category_id'ni "
+                "list_categories natijasidan oling; kategoriya NOMINI ('Uzuklar') bersangiz ham bo'ladi."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category_id": {"type": "string", "description": "list_categories bergan id yoki kategoriya nomi"},
+                },
+                "required": ["category_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_boxes",
             "description": (
                 "Rangli qutilar (box) ro'yxati — mijoz qadoq/quti/sovg'a qutisi so'raganda yoki taklif "
@@ -601,6 +620,32 @@ async def _resolve_variant_id(repo, catalog, raw):
     return None
 
 
+async def _resolve_category_id(db: AsyncSession, raw):
+    """AI bergan kategoriyani haqiqiy id'ga hal qiladi: UUID yoki nom ("Uzuklar"). Topilmasa None."""
+    if not raw:
+        return None
+    raw = str(raw).strip()
+    rows = await CatalogRepository(db).categories_with_stock()
+    categories = [category for category, _count in rows]
+    try:
+        cid = uuid.UUID(raw)
+        for category in categories:
+            if category.id == cid:
+                return category.id
+        return None
+    except (ValueError, TypeError):
+        pass
+    low = raw.lower()
+    for category in categories:
+        if (category.name_uz or "").lower() == low:
+            return category.id
+    for category in categories:
+        name = (category.name_uz or "").lower()
+        if name and (low in name or name in low):
+            return category.id
+    return None
+
+
 async def _resolve_box_id(db: AsyncSession, category_id, raw):
     """AI bergan box'ni haqiqiy box id'ga hal qiladi (chidamli).
 
@@ -818,6 +863,24 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
         return {"categories": [
             {"category_id": str(c.id), "name": c.name_uz, "in_stock_count": n} for c, n in rows
         ]}
+
+    if name == "list_category_products":
+        from app.core.pagination import PageParams
+
+        category_id = await _resolve_category_id(db, args.get("category_id"))
+        if category_id is None:
+            return {"error": "Kategoriya topilmadi — avval list_categories chaqiring va o'sha category_id ni bering."}
+        products, _ = await catalog.list_products(
+            pp=PageParams(limit=10, offset=0), status="active",
+            category_id=category_id, in_stock=True,
+        )
+        products.sort(key=lambda p: p.effective_price)
+        sctx = await _sale_ctx(db)
+        return {
+            "count": len(products),
+            "products": [_product_brief(p, sctx) for p in products],
+            "note": "Shu kategoriyadagi zaxirada bor mahsulotlar. Hammasini bitta carouselda yuboring.",
+        }
 
     if name == "list_boxes":
         # product_id IXTIYORIY: berilsa -> shu mahsulot kategoriyasi qutilari;
