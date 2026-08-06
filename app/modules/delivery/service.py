@@ -173,12 +173,18 @@ class DeliveryService:
             location_type = LocationType.bts
             resolved_zone = DeliveryZone.region.value
             provider = DeliveryProvider.bts.value
-        # Filial berilsa saqlaymiz (ixtiyoriy), lekin talab qilmaymiz
+        # Filial berilsa saqlaymiz (ixtiyoriy)
         branch = None
         if bts_branch_id is not None:
             branch = await self.repo.get_bts_branch(bts_branch_id)
             if branch is not None and not branch.is_active:
                 branch = None
+        # BTS zonasi + filial tanlanmagan bo'lsa — ENG YAQIN filialni AVTOMATIK biriktiramiz.
+        # Shunda buyurtmaga filial (nom/manzil/ish vaqti) yoziladi va sotuvchi mijozga ayta oladi.
+        if branch is None and location_type == LocationType.bts:
+            cands = await self._candidate_branches(lat, lng)
+            if cands:
+                branch = cands[0][0]  # eng yaqin
 
         # --- Mijoz lokatsiyasini saqlaymiz (id bilan, qayta ishlatiladi) ---
         loc = CustomerLocation(
