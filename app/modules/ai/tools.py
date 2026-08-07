@@ -382,6 +382,28 @@ TOOL_SPECS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "request_operator_callback",
+            "description": (
+                "Mijoz RASM yuborib 'shundan bormi', 'shunga o'xshagani bormi' desa yoki katalogda "
+                "yo'q mahsulotni so'rasa — ism va telefonini saqlab, so'rovni rasmi bilan birga "
+                "operatorlar guruhiga uzatadi. Operator mijozga o'zi aloqaga chiqadi. "
+                "Ism VA telefon olingandan keyin chaqiring."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Mijozning ism-familiyasi"},
+                    "phone": {"type": "string", "description": "Telefon raqami"},
+                    "question": {"type": "string",
+                                 "description": "Mijoz nima so'radi — bir jumlada (ixtiyoriy)"},
+                },
+                "required": ["name", "phone"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "complete_order",
             "description": (
                 "Buyurtmani YAKUNLANGAN (completed) qiladi — mijoz buyumni OLGANINI tasdiqlaganda "
@@ -766,6 +788,28 @@ async def _resolve_latest_receipt_image(db: AsyncSession, conv: Conversation) ->
     return None
 
 
+async def _last_customer_image_url(db: AsyncSession, conversation_id) -> str | None:
+    """Mijoz yuborgan oxirgi rasm HAVOLASI (yuklab olinmaydi — guruhga havola bo'lib ketadi).
+
+    Telegram rasmlari `file_id` bilan keladi, havolasi yo'q — bunday holda None.
+    """
+    from sqlalchemy import select
+
+    from app.modules.inbox.models import Message
+
+    rows = (await db.execute(
+        select(Message.attachments)
+        .where(Message.conversation_id == conversation_id, Message.direction == "incoming")
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )).scalars().all()
+    for attachments in rows:
+        for att in (attachments or []):
+            if isinstance(att, dict) and str(att.get("url") or "").startswith("http"):
+                return att["url"]
+    return None
+
+
 async def _download_attachment(db: AsyncSession, conv: Conversation, att: dict) -> tuple[bytes, str] | None:
     """Bitta attachmentni baytlarga yuklab oladi (kanalga qarab). (bytes, ext) yoki None."""
     import httpx
@@ -1003,6 +1047,32 @@ async def dispatch(name: str, args: dict, ctx: ToolContext) -> dict:
             cust.phone = phone[:32]
         await db.commit()
         return {"saved": True, "name": cust.full_name, "phone": cust.phone}
+
+    if name == "request_operator_callback":
+        from app.modules.inbox.models import Customer
+        from app.modules.notifications.service import NotificationService
+
+        nm = (args.get("name") or "").strip()
+        phone = (args.get("phone") or "").strip()
+        if not phone:
+            return {"sent": False, "error": "Telefon raqami kerak — mijozdan so'rang."}
+        cust = await db.get(Customer, ctx.conversation.customer_id)
+        if cust is None:
+            return {"sent": False, "error": "mijoz topilmadi"}
+        if nm:
+            cust.full_name = nm[:255]
+        cust.phone = phone[:32]
+        await db.commit()
+        image_url = await _last_customer_image_url(db, ctx.conversation.id)
+        sent = await NotificationService(db).notify_operator_request(
+            cust, args.get("question"), image_url
+        )
+        return {
+            "sent": sent,
+            "name": cust.full_name,
+            "phone": cust.phone,
+            "note": "So'rov operatorga uzatildi — mijozga operator o'zi aloqaga chiqishini ayting.",
+        }
 
     if name == "resolve_instagram_media":
         product = await catalog.resolve_instagram_media(args.get("link_or_ref", ""))

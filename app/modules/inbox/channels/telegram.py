@@ -80,8 +80,13 @@ class TelegramClient:
         self._base = settings.telegram_api_base_url.rstrip("/")
 
     async def send_text(
-        self, recipient_id: str, text: str, reply_markup: dict | None = None
+        self,
+        recipient_id: str,
+        text: str,
+        reply_markup: dict | None = None,
+        parse_mode: str | None = None,
     ) -> SendResult:
+        """Matn yuboradi. `parse_mode="Markdown"` bo'lsa rasm havolasi preview bo'lib ko'rinadi."""
         if not self._token:
             raise ChannelError("TELEGRAM_BOT_TOKEN sozlanmagan")
         url = f"{self._base}/bot{self._token}/sendMessage"
@@ -90,6 +95,8 @@ class TelegramClient:
         async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
             for i, chunk in enumerate(chunks):
                 payload: dict = {"chat_id": recipient_id, "text": chunk}
+                if parse_mode:
+                    payload["parse_mode"] = parse_mode
                 if reply_markup is not None and i == len(chunks) - 1:  # tugmalar oxirgi bo'lakda
                     payload["reply_markup"] = reply_markup
                 resp = await client.post(url, json=payload)

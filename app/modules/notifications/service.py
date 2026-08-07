@@ -1,12 +1,14 @@
-"""notifications Service — owner/manager botiga xabarnomalar (TZ 12 / 4-bo'lim).
+"""notifications Service — owner/manager botiga va operator GURUHiga xabarnomalar (TZ 12 / 4-bo'lim).
 
-Faza 5: to'lov cheki keldi → owner/manager Telegram chatiga tasdiq/rad tugmalari bilan boradi.
-Chat id: `settings.payment_review_telegram_chat_id`. Sozlanmagan bo'lsa — jim (log).
+Ikki oqim:
+- To'lov cheki → `payment_review_telegram_chat_id` chatiga ✅/❌ tugmalar bilan (TZ 12).
+- Yangi buyurtma va operator so'rovi → `orders_group_telegram_chat_id` guruhiga (markdown, rasm havolasi bilan).
 """
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.media_url import public_media_url
 from app.modules.inbox.channels.base import ChannelError
 from app.modules.inbox.channels.telegram import TelegramClient
 from app.modules.notifications.models import Notification
@@ -15,6 +17,29 @@ from app.modules.payments.models import Payment
 from app.modules.settings.repository import SettingsRepository
 
 logger = logging.getLogger(__name__)
+
+# Telegram "Markdown" (legacy) rejimida shu belgilar formatlash deb o'qiladi —
+# mijoz ismi/savolida uchrasa xabar 400 bilan qaytadi, shuning uchun qalqon qo'yamiz.
+_MD_SPECIAL = ("_", "*", "`", "[")
+
+
+def _md(value) -> str:
+    """Markdown uchun xavfsiz matn."""
+    text = str(value or "")
+    for ch in _MD_SPECIAL:
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
+def _md_image(url: str | None, label: str) -> str:
+    """Rasm havolasi — Telegram uni preview qilib ko'rsatadi (fayl saqlanmaydi)."""
+    url = public_media_url(url) if url else ""
+    # Havola ichida ")" bo'lsa markdown buziladi — bunday havolani tashlab ketamiz
+    return f"[{label}]({url})\n" if url and ")" not in url else ""
+
+
+def _sum(value) -> str:
+    return f"{int(value or 0):,}".replace(",", " ")
 
 
 class NotificationService:
@@ -65,19 +90,50 @@ class NotificationService:
             await self.db.commit()
             return False
 
-    async def notify_order_confirmed(self, order: Order) -> bool:
-        """Tasdiqlangan (to'lov tasdiqlangan) buyurtmani Telegram GURUHiga yuboradi.
+    # ---------- Operator guruhi ----------
+    async def notify_new_order(self, order: Order) -> bool:
+        """YANGI buyurtma (yaratilishi bilan) — operator guruhiga tasdiqlash uchun.
 
-        Faqat to'lov approved bo'lganда chaqiriladi (PaymentService.approve). Guruh chat id
-        `settings.orders_group_telegram_chat_id`. Sozlanmagan bo'lsa — jim. Best-effort (approve'ni buzmaydi).
+        To'lov tasdiqlangandan keyin guruhga xabar YUBORILMAYDI: operator buyurtmani
+        aynan tushgan paytda ko'rishi kerak. Best-effort — buyurtma yaratishni buzmaydi.
         """
+        text = await self._format_new_order(order)
+        return await self._send_to_group(
+            type_="order_created", text=text, entity_type="order", entity_id=order.id
+        )
+
+    async def notify_operator_request(
+        self, customer, question: str | None, image_url: str | None = None
+    ) -> bool:
+        """Mijoz rasm yuborib «shunga o'xshagani bormi» desa — operator aloqaga chiqishi uchun.
+
+        Mijoz ismi, telefoni, so'rovi va yuborgan rasmi havolasi guruhga boradi.
+        Rasm YUKLAB OLINMAYDI — havola markdown ko'rinishida beriladi.
+        """
+        parts = ["🔔 *Operator kerak*", "Mijoz rasm yuborib mahsulot so'radi.", ""]
+        image_line = _md_image(image_url, "🖼 Mijoz rasmi")
+        if image_line:
+            parts.append(image_line)
+        parts.append(f"👤 {_md(getattr(customer, 'full_name', None) or '—')}")
+        parts.append(f"📞 {_md(getattr(customer, 'phone', None) or '—')}")
+        if question:
+            parts.append(f"❓ {_md(question)}")
+        channel = getattr(customer, "channel", None)
+        username = getattr(customer, "username", None)
+        if channel:
+            parts.append(f"💬 {_md(channel)}" + (f" @{_md(username)}" if username else ""))
+        return await self._send_to_group(
+            type_="operator_request", text="\n".join(parts),
+            entity_type="customer", entity_id=getattr(customer, "id", None),
+        )
+
+    async def _send_to_group(self, *, type_: str, text: str, entity_type: str, entity_id) -> bool:
+        """Operator guruhiga markdown xabar (umumiy oqim + notification qaydi)."""
         setting = await SettingsRepository(self.db).get("orders_group_telegram_chat_id")
         chat_id = setting.value if setting is not None else None
-
-        text = await self._format_confirmed_order(order)
         record = Notification(
-            type="order_confirmed", channel="telegram", target=str(chat_id) if chat_id else None,
-            body=text, status="pending", entity_type="order", entity_id=order.id,
+            type=type_, channel="telegram", target=str(chat_id) if chat_id else None,
+            body=text, status="pending", entity_type=entity_type, entity_id=entity_id,
         )
         self.db.add(record)
         if not chat_id:
@@ -89,49 +145,56 @@ class NotificationService:
             from app.modules.integrations.service import get_config_value
 
             token = await get_config_value(self.db, "telegram", "bot_token")
-            await TelegramClient(bot_token=token).send_text(str(chat_id), text)
+            await TelegramClient(bot_token=token).send_text(str(chat_id), text, parse_mode="Markdown")
             record.status = "sent"
             await self.db.commit()
             return True
         except ChannelError:
             record.status = "failed"
-            logger.warning("Guruh buyurtma xabari yuborilmadi (token/chat)")
+            logger.warning("Guruh xabari yuborilmadi (%s): token/chat/format", type_)
             await self.db.commit()
             return False
 
-    async def _format_confirmed_order(self, order: Order) -> str:
-        """Guruhga yuboriladigan buyurtma matni — mahsulotlar, mijoz, manzil, jami."""
+    async def _format_new_order(self, order: Order) -> str:
+        """Guruhga yuboriladigan buyurtma matni — mahsulot rasmi, tarkib, mijoz, manzil, jami."""
         from app.modules.catalog.repository import CatalogRepository
         from app.modules.delivery.repository import DeliveryRepository
         from app.modules.inbox.models import Customer
 
         catalog = CatalogRepository(self.db)
         lines: list[str] = []
+        first_image: str | None = None
         for it in order.items:
             variant = await catalog.get_variant(it.variant_id)
             product = await catalog.get_product(variant.product_id) if variant else None
-            seg = f"• {product.name_uz if product else '?'}"
+            if product is not None and first_image is None:
+                media = [m for m in product.media if m.image_url]
+                if media:
+                    first_image = media[0].image_url
+            seg = f"• {_md(product.name_uz if product else '?')}"
             if it.quantity and it.quantity > 1:
                 seg += f" ×{it.quantity}"
             if it.ring_size:
-                seg += f", o'lcham {it.ring_size}"
+                seg += f", o'lcham {_md(it.ring_size)}"
             if it.box_id:
                 box = await catalog.get_box(it.box_id)
                 if box is not None:
-                    seg += f", quti: {box.name_uz}"
+                    seg += f", quti: {_md(box.name_uz)}"
             if it.engraving_text:
-                seg += f", gravirovka: «{it.engraving_text}»"
+                seg += f", gravirovka: «{_md(it.engraving_text)}»"
             lines.append(seg)
+
         cust = await self.db.get(Customer, order.customer_id)
         delivery = await DeliveryRepository(self.db).get_by_order(order.id)
         addr = (delivery.address_text if delivery else None) or "—"
         zone = (delivery.location_type if delivery else None) or "—"
         return (
-            f"✅ Yangi tasdiqlangan buyurtma\n"
-            f"№ {order.order_no}\n\n"
+            f"🆕 *Yangi buyurtma*\n"
+            f"№ {_md(order.order_no)}\n\n"
+            + _md_image(first_image, "🖼 Mahsulot rasmi")
             + "\n".join(lines)
-            + f"\n\n👤 {cust.full_name if cust and cust.full_name else '—'}"
-            + f"\n📞 {cust.phone if cust and cust.phone else '—'}"
-            + f"\n📍 {addr} ({zone})"
-            + f"\n💰 Jami: {int(order.grand_total or 0):,} so'm".replace(",", " ")
+            + f"\n\n👤 {_md(cust.full_name if cust and cust.full_name else '—')}"
+            + f"\n📞 {_md(cust.phone if cust and cust.phone else '—')}"
+            + f"\n📍 {_md(addr)} ({_md(zone)})"
+            + f"\n💰 Jami: {_sum(order.grand_total)} so'm"
         )

@@ -90,7 +90,15 @@ class OrdersService:
         )
         await self.repo.add(order)
         await self.db.commit()
-        return await self.get(order.id)
+        order = await self.get(order.id)
+        # Buyurtma tushdi — operator guruhiga darhol yuboriladi (tasdiqlash uchun). Best-effort.
+        try:
+            from app.modules.notifications.service import NotificationService
+
+            await NotificationService(self.db).notify_new_order(order)
+        except Exception:  # noqa: BLE001 — guruh xabari buyurtmani buzmasin
+            logger.warning("guruhga yangi buyurtma yuborilmadi (order=%s)", order.id, exc_info=True)
+        return order
 
     async def _process_items(self, order: Order, items) -> Decimal:
         """Buyurtma itemlarini yaratadi: validatsiya + zaxira rezerv + narx (gravyurka/box/o'lcham).
