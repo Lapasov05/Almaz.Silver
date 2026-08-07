@@ -349,12 +349,14 @@ TOOL_SPECS: list[dict] = [
         "function": {
             "name": "resolve_instagram_media",
             "description": (
-                "Instagram post/story linkidan yoki story javobidan mahsulotni topadi (bazadan). "
-                "Mijoz IG link tashlasa yoki story'ga javob bersa ishlatiladi. found=false bo'lsa mijozdan so'ra."
+                "Instagram post, reel yoki story'dan mahsulotni topadi (bazadan). Mijoz IG kontentini "
+                "directga yuborsa, story'ga javob bersa yoki havola tashlasa ishlatiladi. Suhbatdagi "
+                "media_ref yoki havola qiymatini bering. found=false bo'lsa mijozdan qaysi mahsulot ekanini so'ra."
             ),
             "parameters": {
                 "type": "object",
-                "properties": {"link_or_ref": {"type": "string", "description": "IG post/story link yoki story_ref"}},
+                "properties": {"link_or_ref": {"type": "string",
+                                               "description": "media_ref (media/story id) yoki havola"}},
                 "required": ["link_or_ref"],
             },
         },

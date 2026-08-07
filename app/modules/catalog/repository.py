@@ -204,17 +204,17 @@ class CatalogRepository:
         )
         return list(res.scalars().all())
 
-    async def list_active_story_products(self) -> list[Product]:
-        """Aktiv (muddati o'tmagan) STORY biriktirilgan mahsulotlar — story-javob fallback uchun.
+    async def list_active_story_media(self) -> list[ProductMedia]:
+        """Aktiv (muddati o'tmagan) STORY media yozuvlari — story-javob fallback uchun.
 
         IG story-javobdagi story ID (webhook) permalink'dagi ID'dan farq qiladi, shu sabab exact
-        match ishlamaydi; agar aktiv story faqat BITTA mahsulotда bo'lsa, o'shanga bog'lanadi.
+        match ishlamaydi; agar aktiv story faqat BITTA bo'lsa, o'shanga bog'lanadi.
         """
         now = datetime.now(timezone.utc)
         res = await self.db.execute(
-            select(Product)
-            .options(*_PRODUCT_LOADERS)
-            .join(ProductMedia, ProductMedia.product_id == Product.id)
+            select(ProductMedia)
+            .options(selectinload(ProductMedia.product).options(*_PRODUCT_LOADERS))
+            .join(Product, Product.id == ProductMedia.product_id)
             .where(
                 Product.deleted_at.is_(None),
                 ProductMedia.media_type == "story",
@@ -311,6 +311,30 @@ class CatalogRepository:
             select(Product).options(*_PRODUCT_LOADERS)
             .join(ProductMedia, ProductMedia.product_id == Product.id)
             .where(ProductMedia.shortcode == shortcode, Product.deleted_at.is_(None))
+        )
+        return res.scalars().first()
+
+    async def get_product_by_ig_ref(self, ref: str) -> Product | None:
+        """Webhook'dan kelgan IG media id yoki shortcode bo'yicha mahsulot.
+
+        Bitta ref uchta joyda bo'lishi mumkin: `shortcode` (post/reel), `story_ref`
+        (permalink'dagi story id) yoki `external_media_id` (webhook bergan story/media id —
+        u permalink'dagidan farq qiladi, birinchi bog'lanishda yodda saqlanadi).
+        """
+        now = datetime.now(timezone.utc)
+        res = await self.db.execute(
+            select(Product).options(*_PRODUCT_LOADERS)
+            .join(ProductMedia, ProductMedia.product_id == Product.id)
+            .where(
+                or_(
+                    ProductMedia.shortcode == ref,
+                    ProductMedia.story_ref == ref,
+                    ProductMedia.external_media_id == ref,
+                ),
+                ProductMedia.is_active.is_(True),
+                or_(ProductMedia.expires_at.is_(None), ProductMedia.expires_at > now),
+                Product.deleted_at.is_(None),
+            )
         )
         return res.scalars().first()
 

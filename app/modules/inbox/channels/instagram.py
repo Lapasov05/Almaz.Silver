@@ -35,6 +35,46 @@ def verify_challenge(mode: str | None, token: str | None, challenge: str | None,
     return None
 
 
+# IG attachment/referral payload'ida media id va havola turli kalitlarda keladi
+# (docs/instagram_webhook_flow.md — "Media ID Olish Prioriteti"). Tartib muhim.
+_MEDIA_ID_KEYS = (
+    "story_media_id", "ig_post_media_id", "ig_reel_media_id", "reel_video_id",
+    "reel_media_id", "media_id", "media_share_id", "media_product_id",
+    "source_id", "target_id", "id",
+)
+_MEDIA_URL_KEYS = ("story_media_url", "url", "media_url", "permalink", "link", "share_url")
+_REFERRAL_ID_KEYS = ("media_id", "source_id", "story_id", "id")
+_REFERRAL_URL_KEYS = ("source_url", "url", "link", "permalink")
+
+
+def _pick(source: dict, keys: tuple[str, ...]) -> str | None:
+    """Berilgan kalitlar tartibida birinchi bo'sh bo'lmagan qiymat."""
+    for key in keys:
+        value = source.get(key)
+        if value:
+            return str(value)
+    return None
+
+
+def _normalize_attachment(attachment: dict) -> dict:
+    """IG attachment'ni normallashtiradi — havola va media id SAQLANADI.
+
+    Mijoz post/reel/story'ni directga yuborsa, mahsulotni topish uchun aynan shu
+    havola/id kerak (`resolve_instagram_media`). Ilgari faqat `payload.url` olinardi,
+    shu sabab story yuborilganда hech qanday ma'lumot qolmasdi.
+    """
+    atype = (attachment.get("type") or "").lower()
+    payload = attachment.get("payload") or {}
+    item: dict = {"type": atype, "url": _pick(payload, _MEDIA_URL_KEYS)}
+    ref = _pick(payload, _MEDIA_ID_KEYS)
+    if atype == "ig_story":
+        item["story_ref"] = ref
+        item["source"] = "share"  # storyni directga yubordi (javob emas)
+    elif ref:
+        item["media_ref"] = ref
+    return item
+
+
 def parse_payload(payload: dict) -> list[NormalizedIncoming]:
     """IG webhook payload'idan barcha kelgan xabarlarni normallashtiradi (echo'lar tashlanadi)."""
     results: list[NormalizedIncoming] = []
@@ -54,23 +94,31 @@ def parse_payload(payload: dict) -> list[NormalizedIncoming]:
                 (att.get("type") or "") == "template" for att in raw_attachments
             ):
                 continue
-            attachments = [
-                {"type": att.get("type"), "url": (att.get("payload") or {}).get("url")}
-                for att in raw_attachments
-            ]
+            attachments = [_normalize_attachment(att) for att in raw_attachments]
             reply = message.get("reply_to") or {}
             # Story javobi: mijoz bizning story'ga javob berdi -> story media_id (mahsulotga bog'lash uchun)
             story = reply.get("story") or {}
             if story.get("id"):
-                attachments.append(
-                    {"type": "ig_story", "story_ref": str(story["id"]), "url": story.get("url")}
-                )
+                attachments.append({
+                    "type": "ig_story",
+                    "story_ref": str(story["id"]),
+                    "url": story.get("url"),
+                    "source": "reply",
+                })
             elif reply.get("mid"):
                 # Oddiy xabarga reply — AI qaysi xabar nazarda tutilganini bilishi uchun
                 attachments.append({
                     "type": "reply",
                     "reply_to_external_id": str(reply["mid"]),
                     "is_self_reply": bool(reply.get("is_self_reply")),
+                })
+            # Referral: mijoz reklama/post/story ichidagi tugma orqali DM ochdi
+            referral = event.get("referral") or (event.get("postback") or {}).get("referral") or {}
+            if referral:
+                attachments.append({
+                    "type": "ig_referral",
+                    "url": _pick(referral, _REFERRAL_URL_KEYS),
+                    "media_ref": _pick(referral, _REFERRAL_ID_KEYS),
                 })
             results.append(
                 NormalizedIncoming(

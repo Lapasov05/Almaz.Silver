@@ -11,8 +11,22 @@ _SHORTCODE_RE = re.compile(
 _STORY_RE = re.compile(r"instagram\.com/stories/[^/]+/(\d+)", re.IGNORECASE)
 # Reel (video) URL — media_type=reel qilib ajratamiz (post'dan farqli)
 _REEL_RE = re.compile(r"instagram\.com/(?:reel|reels)/([A-Za-z0-9_-]+)", re.IGNORECASE)
+# IG CDN havolasi: lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=<media_id>&signature=...
+_ASSET_ID_RE = re.compile(r"[?&]asset_id=(\d+)", re.IGNORECASE)
 
 _SLUG_STRIP_RE = re.compile(r"[^a-z0-9]+")
+
+
+def extract_asset_id(value: str) -> str | None:
+    """IG CDN (lookaside.fbsbx.com) havolasidan `asset_id` — story/media id.
+
+    Webhook story javobida havola shu ko'rinishда keladi. Bazaviy URL'ning o'zi
+    hamma story uchun bir xil, shu sabab FAQAT asset_id ishonchli kalit hisoblanadi.
+    """
+    if not value:
+        return None
+    m = _ASSET_ID_RE.search(value)
+    return m.group(1) if m else None
 
 
 def extract_story_ref(value: str) -> str | None:

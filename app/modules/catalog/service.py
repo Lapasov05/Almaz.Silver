@@ -47,6 +47,7 @@ from app.modules.catalog.schemas import (
 )
 from app.modules.settings.repository import SettingsRepository
 from app.modules.catalog.search import (
+    extract_asset_id,
     extract_instagram_ref,
     extract_shortcode,
     is_instagram_url,
@@ -481,25 +482,55 @@ class CatalogService:
         await self.repo.db.commit()
 
     async def resolve_instagram_media(self, link_or_ref: str) -> Product | None:
-        """Link yoki ref (post/story) bo'yicha mahsulotni topadi (AI tool uchun)."""
-        if not link_or_ref:
+        """Link, media id yoki story ref bo'yicha mahsulotni topadi (AI tool uchun).
+
+        Mijoz post/reel/story'ni directga yuborsa yoki story'ga javob bersa shu chaqiriladi.
+        Tartib (docs/instagram_webhook_flow.md):
+          1. Havoladan ajratilgan ref (shortcode / story id / CDN asset_id) bo'yicha aniq moslik.
+          2. Berilgan qiymatning o'zi bo'yicha aniq moslik.
+          3. Story uchun zaxira yo'l: aktiv story faqat BITTA bo'lsa — o'shanga bog'lanadi va
+             webhook bergan id yodda saqlanadi (keyingi safar aniq moslik ishlaydi).
+        """
+        value = (link_or_ref or "").strip()
+        if not value:
             return None
-        ref = extract_instagram_ref(link_or_ref)
+
+        candidates: list[str] = []
+        asset_id = extract_asset_id(value)     # lookaside CDN havolasi -> story/media id
+        if asset_id:
+            candidates.append(asset_id)
+        ref = extract_instagram_ref(value)     # instagram.com havolasi -> shortcode yoki story id
         if ref is not None:
-            media_type, value = ref
-            if media_type == "story":
-                return await self.repo.get_product_by_story_ref(value)
-            # 'post' deb ajratilgan — lekin toza raqam story_ref ham bo'lishi mumkin (fallback)
-            return (
-                await self.repo.get_product_by_shortcode(value)
-                or await self.repo.get_product_by_story_ref(value)
-            )
-        # Umuman ajralmadi — ikkalasini sinaymiz
-        val = link_or_ref.strip()
-        return (
-            await self.repo.get_product_by_shortcode(val)
-            or await self.repo.get_product_by_story_ref(val)
-        )
+            candidates.append(ref[1])
+        if value not in candidates:
+            candidates.append(value)
+
+        for candidate in candidates:
+            product = await self.repo.get_product_by_ig_ref(candidate)
+            if product is not None:
+                return product
+
+        return await self._resolve_active_story(value, candidates)
+
+    async def _resolve_active_story(self, value: str, candidates: list[str]) -> Product | None:
+        """Story zaxira yo'li — webhook story id permalink'dagi id'dan farq qilganда.
+
+        Faqat aktiv story BITTA bo'lsa bog'laymiz (bir nechта bo'lsa — noto'g'ri
+        mahsulotni ko'rsatib qo'ymaslik uchun hech narsa qaytarmaymiz).
+        """
+        if is_instagram_url(value):
+            return None  # post/reel permalink berilgan — bu story emas, taxmin qilmaymiz
+        webhook_ref = next((c for c in candidates if c.isdigit()), None)
+        if webhook_ref is None:  # story id emas (masalan noma'lum post shortcode'i) — taxmin qilmaymiz
+            return None
+        media_list = await self.repo.list_active_story_media()
+        if len(media_list) != 1:
+            return None
+        media = media_list[0]
+        if media.external_media_id != webhook_ref:
+            media.external_media_id = webhook_ref  # keyingi safar aniq moslik bo'lsin
+            await self.repo.db.commit()
+        return media.product
 
     # ==================== Media ====================
     def _build_media(self, data: MediaCreate) -> ProductMedia:

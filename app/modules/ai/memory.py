@@ -27,6 +27,28 @@ def _gap_note(previous, message) -> str | None:
     return f"[Mijoz {int(hours)} soatdan keyin qayta yozdi]"
 
 
+# Mijoz directga yuborgan IG kontenti — attachment turi qanday tanishtirilishi
+SHARED_MEDIA_LABELS = {
+    "ig_reel": "Instagram reel yubordi",
+    "ig_post": "Instagram post yubordi",
+    "share": "Instagram post yubordi",
+    "ig_referral": "Instagram reklama yoki postidan yozdi",
+}
+
+
+def _media_refs(attachment: dict) -> str:
+    """Kontentning BITTA aniq kaliti — AI resolve_instagram_media'ga aynan shuni beradi.
+
+    Post/reel uchun kalit — instagram.com havolasi (undan shortcode ajratiladi); story uchun —
+    webhook bergan story id (CDN havolasi imzo bilan uzun va ichida shu id turadi). Ikkita
+    qiymat berilsa AI qaysi birini uzatishni chalkashtiradi, shuning uchun bittasi qoladi.
+    """
+    ref = attachment.get("story_ref") or attachment.get("media_ref") or ""
+    url = attachment.get("url") or ""
+    key = url if ("instagram.com" in url and (not ref or ref not in url)) else ref
+    return f", media_ref={key}" if key else ""
+
+
 def _replied_message_note(target, is_self_reply: bool) -> str:
     who = "o'z xabariga" if is_self_reply else "bizning xabarga"
     if target is None:
@@ -54,11 +76,11 @@ def _customer_notes(message, by_external_id: dict, with_images: bool) -> tuple[l
             else:
                 notes.append("[Mijoz rasm yubordi]")
         elif atype == "ig_story":
-            story_ref = attachment.get("story_ref")
-            if story_ref:
-                notes.append(f"[Mijoz Instagram story'ga javob berdi, story_ref={story_ref}]")
-            else:
-                notes.append("[Mijoz Instagram story'ga javob berdi]")
+            action = "story'ga javob berdi" if attachment.get("source") == "reply" else "story'ni yubordi"
+            notes.append(f"[Mijoz Instagram {action}{_media_refs(attachment)}]")
+        elif atype in SHARED_MEDIA_LABELS:
+            label = SHARED_MEDIA_LABELS[atype]
+            notes.append(f"[Mijoz {label}{_media_refs(attachment)}]")
         elif atype == "reply":
             target = by_external_id.get(attachment.get("reply_to_external_id"))
             notes.append(_replied_message_note(target, bool(attachment.get("is_self_reply"))))
