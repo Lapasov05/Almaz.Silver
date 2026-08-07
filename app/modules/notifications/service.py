@@ -91,13 +91,15 @@ class NotificationService:
             return False
 
     # ---------- Operator guruhi ----------
-    async def notify_new_order(self, order: Order) -> bool:
+    async def notify_new_order(self, order: Order, superseded: list[str] | None = None) -> bool:
         """YANGI buyurtma (yaratilishi bilan) — operator guruhiga tasdiqlash uchun.
 
         To'lov tasdiqlangandan keyin guruhga xabar YUBORILMAYDI: operator buyurtmani
         aynan tushgan paytda ko'rishi kerak. Best-effort — buyurtma yaratishni buzmaydi.
+        `superseded` — mijoz fikrini o'zgartirib, bekor bo'lgan oldingi buyurtma raqamlari
+        (guruhdagi eski xabar endi kuchda emasligini operator bilib tursin).
         """
-        text = await self._format_new_order(order)
+        text = await self._format_new_order(order, superseded)
         return await self._send_to_group(
             type_="order_created", text=text, entity_type="order", entity_id=order.id
         )
@@ -155,7 +157,7 @@ class NotificationService:
             await self.db.commit()
             return False
 
-    async def _format_new_order(self, order: Order) -> str:
+    async def _format_new_order(self, order: Order, superseded: list[str] | None = None) -> str:
         """Guruhga yuboriladigan buyurtma matni — mahsulot rasmi, tarkib, mijoz, manzil, jami."""
         from app.modules.catalog.repository import CatalogRepository
         from app.modules.delivery.repository import DeliveryRepository
@@ -197,4 +199,6 @@ class NotificationService:
             + f"\n📞 {_md(cust.phone if cust and cust.phone else '—')}"
             + f"\n📍 {_md(addr)} ({_md(zone)})"
             + f"\n💰 Jami: {_sum(order.grand_total)} so'm"
+            + (f"\n\n♻️ Mijoz o'zgartirdi — bekor bo'ldi: {_md(', '.join(superseded))}"
+               if superseded else "")
         )

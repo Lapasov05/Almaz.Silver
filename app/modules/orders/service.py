@@ -67,7 +67,9 @@ class OrdersService:
             raise AppError("Buyurtmada kamida bitta mahsulot bo'lishi kerak")
 
         # Oldingi faol buyurtmalarni bekor qilamiz (supersede)
+        superseded: list[str] = []
         for prev in await self.repo.list_active_orders(customer_id):
+            superseded.append(prev.order_no)
             await self._release_reservation(prev)
             prev.history.append(
                 OrderStatusHistory(
@@ -95,7 +97,7 @@ class OrdersService:
         try:
             from app.modules.notifications.service import NotificationService
 
-            await NotificationService(self.db).notify_new_order(order)
+            await NotificationService(self.db).notify_new_order(order, superseded=superseded)
         except Exception:  # noqa: BLE001 — guruh xabari buyurtmani buzmasin
             logger.warning("guruhga yangi buyurtma yuborilmadi (order=%s)", order.id, exc_info=True)
         return order
