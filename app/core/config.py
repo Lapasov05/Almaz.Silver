@@ -112,6 +112,9 @@ class Settings(BaseSettings):
     ai_memory_message_count: int = 0        # 0 = cheklovsiz: AI butun suhbatni ko'radi
     ai_max_tool_iterations: int = 16        # tool-calling sikli chegarasi (mahsulot+quti rasmlari + buyurtma ko'p tool chaqiradi)
     ai_reply_delay_seconds: float = 7.0     # javob oldidan insonsimon pauza (typing ko'rinadi)
+    # Mijoz ketma-ket bir necha xabar yozsa — shuncha kutib, hammasiga BITTA javob beriladi
+    ai_burst_wait_seconds: float = 5.0
+    ai_lock_wait_seconds: float = 90.0      # oldingi javob tugashini kutish (parallel javob bo'lmasin)
 
     # --- MinIO / S3 ---
     s3_endpoint_url: str = "http://minio:9000"

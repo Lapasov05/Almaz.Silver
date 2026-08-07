@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
+from app.modules.ai.coalesce import mark_answered
 from app.modules.ai.memory import build_conversation_input
 from app.modules.ai.llm.base import LLMProvider
 from app.modules.ai.prompt_registry import get_ai_text
@@ -39,7 +40,14 @@ class Agent:
         self.db = db
         self.provider = provider
 
-    async def respond(self, conversation_id: uuid.UUID, *, force: bool = False) -> AgentOutcome:
+    async def respond(
+        self,
+        conversation_id: uuid.UUID,
+        *,
+        force: bool = False,
+        started_at: float | None = None,
+    ) -> AgentOutcome:
+        """`started_at` — task boshlangan payt; insonsimon pauza shundan hisoblanadi."""
         inbox_repo = InboxRepository(self.db)
         conversation = await inbox_repo.get_conversation(conversation_id)
         if conversation is None:
@@ -65,7 +73,10 @@ class Agent:
 
         inbox_service = InboxService(inbox_repo)
         await inbox_service.send_typing(conversation)
-        started_at = time.monotonic()
+        if started_at is None:
+            started_at = time.monotonic()
+        # Javob shu xabargacha bo'lgan hammasini qamrab oladi — qolgan tasklar takrorlamasin
+        answered_upto = getattr(await inbox_repo.get_last_incoming_message(conversation_id), "created_at", None)
         prompt_version = int(await self._setting("prompt_version", 3) or 3)
         base_prompt = await get_ai_text(self.db, "ai_system_prompt_v3")
         override = await self._setting("system_prompt_override", None)
@@ -141,6 +152,7 @@ class Agent:
         if tool_trace:
             message.tool_call = {"calls": tool_trace}
         await self.db.commit()
+        await mark_answered(conversation_id, answered_upto)
         return AgentOutcome(
             status="replied",
             reply=reply,

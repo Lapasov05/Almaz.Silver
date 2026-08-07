@@ -90,6 +90,16 @@ class InboxRepository:
     async def get_message(self, message_id: uuid.UUID) -> Message | None:
         return await self.db.get(Message, message_id)
 
+    async def get_last_incoming_message(self, conversation_id: uuid.UUID) -> Message | None:
+        """Suhbatdagi eng oxirgi kiruvchi (mijoz) xabari — javob takrorlanmasligi uchun."""
+        res = await self.db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id, Message.direction == "incoming")
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        return res.scalars().first()
+
     async def list_messages(
         self,
         conversation_id: uuid.UUID,
