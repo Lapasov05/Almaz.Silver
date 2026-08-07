@@ -142,6 +142,28 @@ class InstagramClient:
         self._base = settings.instagram_graph_base_url.rstrip("/")
         self._version = settings.instagram_graph_version
 
+    async def list_active_stories(self) -> list[dict]:
+        """Aktiv (24 soat ichidagi) storylar: [{"id": ..., "permalink": ...}].
+
+        Webhook story javobida keladigan `id` permalink'dagi share id'дан farq qiladi.
+        Graph API ikkalasini birga qaytaradi — mahsulotni aniq topish uchun shu kerak
+        (docs/instagram_webhook_flow.md, "Story Linklash Algoritmi").
+        """
+        if not self._token:
+            return []
+        url = f"{settings.instagram_stories_base_url.rstrip('/')}/{self._version}/me/stories"
+        try:
+            async with httpx.AsyncClient(timeout=settings.http_timeout_seconds) as client:
+                resp = await client.get(url, params={"fields": "id,permalink", "access_token": self._token})
+        except Exception as e:  # noqa: BLE001 — lookup ixtiyoriy, oqim to'xtamasin
+            logger.warning("Instagram active stories olinmadi: %s", e)
+            return []
+        if resp.status_code >= 400:
+            logger.warning("Instagram active stories xato: %s %s", resp.status_code, resp.text[:250])
+            return []
+        data = resp.json()
+        return [item for item in (data.get("data") or []) if isinstance(item, dict)]
+
     async def send_text(self, recipient_id: str, text: str) -> SendResult:
         if not self._token:
             raise ChannelError("Instagram access_token sozlanmagan")

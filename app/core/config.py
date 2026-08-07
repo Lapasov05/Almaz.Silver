@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     # --- Instagram / Meta Graph API (bazaviy URL; TOKENLAR DB'да) ---
     instagram_graph_version: str = "v21.0"
     instagram_graph_base_url: str = "https://graph.facebook.com"
+    # Aktiv storylar ro'yxati (me/stories) Instagram Login tokeni bilan shu hostda ochiladi
+    instagram_stories_base_url: str = "https://graph.instagram.com"
 
     # --- Umumiy HTTP ---
     http_timeout_seconds: float = 10.0

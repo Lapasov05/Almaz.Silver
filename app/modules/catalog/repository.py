@@ -314,8 +314,8 @@ class CatalogRepository:
         )
         return res.scalars().first()
 
-    async def get_product_by_ig_ref(self, ref: str) -> Product | None:
-        """Webhook'dan kelgan IG media id yoki shortcode bo'yicha mahsulot.
+    async def get_ig_media_by_ref(self, ref: str) -> ProductMedia | None:
+        """Webhook'dan kelgan IG media id yoki shortcode bo'yicha media yozuvi (mahsuloti bilan).
 
         Bitta ref uchta joyda bo'lishi mumkin: `shortcode` (post/reel), `story_ref`
         (permalink'dagi story id) yoki `external_media_id` (webhook bergan story/media id —
@@ -323,8 +323,9 @@ class CatalogRepository:
         """
         now = datetime.now(timezone.utc)
         res = await self.db.execute(
-            select(Product).options(*_PRODUCT_LOADERS)
-            .join(ProductMedia, ProductMedia.product_id == Product.id)
+            select(ProductMedia)
+            .options(selectinload(ProductMedia.product).options(*_PRODUCT_LOADERS))
+            .join(Product, Product.id == ProductMedia.product_id)
             .where(
                 or_(
                     ProductMedia.shortcode == ref,

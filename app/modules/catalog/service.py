@@ -49,6 +49,7 @@ from app.modules.settings.repository import SettingsRepository
 from app.modules.catalog.search import (
     extract_asset_id,
     extract_instagram_ref,
+    extract_story_ref,
     extract_shortcode,
     is_instagram_url,
     slugify,
@@ -488,8 +489,9 @@ class CatalogService:
         Tartib (docs/instagram_webhook_flow.md):
           1. Havoladan ajratilgan ref (shortcode / story id / CDN asset_id) bo'yicha aniq moslik.
           2. Berilgan qiymatning o'zi bo'yicha aniq moslik.
-          3. Story uchun zaxira yo'l: aktiv story faqat BITTA bo'lsa — o'shanga bog'lanadi va
-             webhook bergan id yodda saqlanadi (keyingi safar aniq moslik ishlaydi).
+          3. Story uchun Graph API'dagi aktiv storylar — webhook id'ni permalink bilan bog'laydi.
+          4. Oxirgi zaxira: aktiv story faqat BITTA bo'lsa — o'shanga bog'lanadi.
+        Topilgan webhook id media yozuviga saqlanadi, keyingi safar 1-qadamda topiladi.
         """
         value = (link_or_ref or "").strip()
         if not value:
@@ -506,31 +508,54 @@ class CatalogService:
             candidates.append(value)
 
         for candidate in candidates:
-            product = await self.repo.get_product_by_ig_ref(candidate)
-            if product is not None:
-                return product
+            media = await self.repo.get_ig_media_by_ref(candidate)
+            if media is not None:
+                return media.product
 
-        return await self._resolve_active_story(value, candidates)
+        return await self._resolve_story_by_webhook_id(value, candidates)
 
-    async def _resolve_active_story(self, value: str, candidates: list[str]) -> Product | None:
-        """Story zaxira yo'li — webhook story id permalink'dagi id'dan farq qilganда.
-
-        Faqat aktiv story BITTA bo'lsa bog'laymiz (bir nechта bo'lsa — noto'g'ri
-        mahsulotni ko'rsatib qo'ymaslik uchun hech narsa qaytarmaymiz).
-        """
+    async def _resolve_story_by_webhook_id(self, value: str, candidates: list[str]) -> Product | None:
+        """Webhook story id permalink'dagi id'dan farq qilganда mahsulotni topadi."""
         if is_instagram_url(value):
             return None  # post/reel permalink berilgan — bu story emas, taxmin qilmaymiz
         webhook_ref = next((c for c in candidates if c.isdigit()), None)
         if webhook_ref is None:  # story id emas (masalan noma'lum post shortcode'i) — taxmin qilmaymiz
             return None
-        media_list = await self.repo.list_active_story_media()
-        if len(media_list) != 1:
+
+        media = await self._story_media_from_graph(webhook_ref)
+        if media is None:
+            media = await self._only_active_story_media()
+        if media is None:
             return None
-        media = media_list[0]
         if media.external_media_id != webhook_ref:
             media.external_media_id = webhook_ref  # keyingi safar aniq moslik bo'lsin
             await self.repo.db.commit()
         return media.product
+
+    async def _story_media_from_graph(self, webhook_ref: str) -> ProductMedia | None:
+        """Graph API'dagi aktiv storylar orqali aniq moslik — nechta story bo'lsa ham ishlaydi.
+
+        Graph API har story uchun `id` (webhook beradigan) va `permalink` (bizda `story_ref`
+        sifatida saqlangan share id) ni birga qaytaradi, shu ikkisi ko'prik bo'ladi.
+        """
+        from app.modules.inbox.channels.instagram import InstagramClient
+        from app.modules.integrations.service import get_config_value
+
+        token = await get_config_value(self.repo.db, "instagram", "access_token")
+        if not token:
+            return None
+        for story in await InstagramClient(access_token=token).list_active_stories():
+            if str(story.get("id") or "") != webhook_ref:
+                continue
+            share_id = extract_story_ref(story.get("permalink") or "")
+            return await self.repo.get_ig_media_by_ref(share_id) if share_id else None
+        return None
+
+    async def _only_active_story_media(self) -> ProductMedia | None:
+        """Oxirgi zaxira — Graph API ishlamasa. Faqat aktiv story BITTA bo'lsa bog'laymiz,
+        bir nechta bo'lsa noto'g'ri mahsulotni ko'rsatmaslik uchun hech narsa qaytarmaymiz."""
+        media_list = await self.repo.list_active_story_media()
+        return media_list[0] if len(media_list) == 1 else None
 
     # ==================== Media ====================
     def _build_media(self, data: MediaCreate) -> ProductMedia:
