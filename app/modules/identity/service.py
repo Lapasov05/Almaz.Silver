@@ -32,13 +32,15 @@ class AuthService:
             return None
         return user
 
-    async def login(self, email: str, password: str) -> tuple[str, str]:
+    async def login(self, email: str, password: str) -> tuple[User, str, str]:
+        """(user, access, refresh) — user javobga rol/permission qo'shish uchun qaytadi."""
         user = await self.authenticate(email, password)
         if user is None:
             raise AuthError("Email yoki parol noto'g'ri")
-        return self._issue_tokens(str(user.id))
+        access, refresh = self._issue_tokens(str(user.id))
+        return user, access, refresh
 
-    async def refresh(self, refresh_token: str) -> tuple[str, str]:
+    async def refresh(self, refresh_token: str) -> tuple[User, str, str]:
         payload = decode_token(refresh_token)
         if payload.get("type") != "refresh":
             raise AuthError("Noto'g'ri refresh token")
@@ -47,7 +49,8 @@ class AuthService:
         user = await self.repo.get_user_by_id(uuid.UUID(payload["sub"]))
         if user is None or not user.is_active:
             raise AuthError("Foydalanuvchi topilmadi yoki faol emas")
-        return self._issue_tokens(str(user.id))
+        access, new_refresh = self._issue_tokens(str(user.id))
+        return user, access, new_refresh
 
     async def logout(self, refresh_token: str) -> None:
         """Refresh token'ni bekor qiladi (Redis blacklist, muddatigacha)."""

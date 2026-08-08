@@ -28,6 +28,19 @@ class UserOut(BaseModel):
     is_active: bool
 
 
+class AuthResponse(TokenResponse):
+    """Login/refresh javobi — tokenlar + foydalanuvchi, rollari va permission'lari.
+
+    Frontend kirgan zahoti menyu/tugmalarni permission bo'yicha yig'a olsin deb
+    `/auth/me` ga alohida so'rov kerak bo'lmaydi. Kodlar `require_permission`
+    tekshiradigan kodlar bilan aynan bir xil (masalan "orders:view").
+    """
+
+    user: UserOut
+    roles: list[str]
+    permissions: list[str]
+
+
 class MeResponse(UserOut):
     """Joriy foydalanuvchi + rollari va samarali permission'lari."""
 
