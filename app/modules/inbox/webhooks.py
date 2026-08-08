@@ -96,8 +96,9 @@ async def instagram_webhook(
     sig_ok = ig.verify_signature(raw, request.headers.get("X-Hub-Signature-256"), app_secret=app_secret)
 
     # Audit HAR DOIM saqlanadi — imzo rad etilса ham ko'rinsin (aks holда "kelmagandek" tuyuladi).
-    # app_secret Meta'niki bilan mos kelmasa -> `rejected_signature` qatorlari ig-events'да chiqadi.
-    await log_event(db, "instagram", payload, status="received" if sig_ok else "rejected_signature")
+    # app_secret Meta'niki bilan mos kelmasa -> `rejected` qatorlari ig-events'да chiqadi.
+    # DIQQAT: status ustuni VARCHAR(16) — uzunroq qiymat insert'ni buzadi (500 qaytadi).
+    await log_event(db, "instagram", payload, status="received" if sig_ok else "rejected")
     if not sig_ok:
         await db.commit()  # audit saqlansin, keyin rad etamiz
         raise AuthError("Instagram imzo (signature) noto'g'ri")
