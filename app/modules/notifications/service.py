@@ -112,8 +112,9 @@ class NotificationService:
         Mijoz ismi, telefoni, so'rovi va yuborgan rasmi havolasi guruhga boradi.
         Rasm YUKLAB OLINMAYDI — havola markdown ko'rinishida beriladi.
         """
-        parts = ["🔔 *Operator kerak*", "Mijoz rasm yuborib mahsulot so'radi.", ""]
-        image_line = _md_image(image_url, "🖼 Mijoz rasmi")
+        parts = ["🔔 *Operator kerak*", "Mijoz rasm yoki Instagram kontenti yuborib mahsulot so'radi.", ""]
+        # Rasm ham, Instagram post/reel havolasi ham shu yerdan keladi — umumiy nom
+        image_line = _md_image(image_url, "🖼 Mijoz yuborgan kontent")
         if image_line:
             parts.append(image_line)
         parts.append(f"👤 {_md(getattr(customer, 'full_name', None) or '—')}")
